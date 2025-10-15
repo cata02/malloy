@@ -27,6 +27,11 @@ import {StaticSourceSpace} from '../field-space/static-space';
 import type {FieldSpace, SourceFieldSpace} from '../types/field-space';
 import type {PipelineComp} from '../types/pipeline-comp';
 import {View} from './view';
+import {QOpDescView} from './qop-desc-view';
+import {
+  requiresNewStage,
+  segmentTypeFromPipeSegment,
+} from '../query-elements/query-class-policy';
 
 /**
  * A view operation which represents adding a segment (or multiple
@@ -44,9 +49,35 @@ export class ViewArrow extends View {
     super({base, operation});
   }
 
+  private shouldCreateNewStage(
+    lastSegment: PipeSegment,
+    operation: QOpDescView
+  ): boolean {
+    const fromSeg = segmentTypeFromPipeSegment(lastSegment);
+    for (const qop of operation.operation.list) {
+      if (requiresNewStage(fromSeg, qop.forceQueryClass)) return true;
+    }
+    return false;
+  }
+
   pipelineComp(fs: FieldSpace): PipelineComp {
     const baseComp = this.base.pipelineComp(fs);
     const nextFS = new StaticSourceSpace(baseComp.outputStruct, 'public');
+
+    // Check if the operation is a QOpDescView that needs refinement
+    if (this.operation instanceof QOpDescView) {
+      // Check if this is an incompatible transition that requires a new stage
+      const lastSegment = baseComp.pipeline[baseComp.pipeline.length - 1];
+      const needsNewStage = this.shouldCreateNewStage(
+        lastSegment,
+        this.operation
+      );
+
+      if (!needsNewStage) {
+        this.operation.operation.refineFrom(lastSegment);
+      }
+    }
+
     const finalComp = this.operation.pipelineComp(nextFS);
     return {
       pipeline: [...baseComp.pipeline, ...finalComp.pipeline],

@@ -27,6 +27,7 @@ import type {Source} from '../source-elements/source';
 import {MalloyElement} from '../types/malloy-element';
 import type {QueryComp} from '../types/query-comp';
 import type {QueryElement} from '../types/query-element';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A query element which represents running the intrinsic fields of a
@@ -39,17 +40,20 @@ import type {QueryElement} from '../types/query-element';
 export class QueryRaw extends MalloyElement implements QueryElement {
   elementType = 'query-raw';
 
-  constructor(readonly source: Source) {
+  constructor(
+    readonly source: Source,
+    public parameterSpace?: ParameterSpace
+  ) {
     super({source});
   }
 
   queryComp(isRefOk: boolean): QueryComp {
     const invoked = isRefOk
-      ? this.source.structRef(undefined)
-      : {structRef: this.source.getSourceDef(undefined)};
+      ? this.source.structRef(this.parameterSpace)
+      : {structRef: this.source.getSourceDef(this.parameterSpace)};
     const structDef = refIsStructDef(invoked.structRef)
       ? invoked.structRef
-      : this.source.getSourceDef(undefined);
+      : this.source.getSourceDef(this.parameterSpace);
     return {
       query: {
         type: 'query',

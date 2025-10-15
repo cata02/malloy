@@ -26,6 +26,8 @@ import {Source} from './source';
 import type {QueryElement} from '../types/query-element';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import type {HasParameter} from '../parameters/has-parameter';
+import {AbstractParameter} from '../types/space-param';
+import {assignParameterSpace} from '../query-elements/parameter-space';
 import {v4 as uuidv4} from 'uuid';
 
 export class QuerySource extends Source {
@@ -35,13 +37,24 @@ export class QuerySource extends Source {
   }
 
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
-    return this.withParameters(parameterSpace, undefined);
+    // Extract parameters from the parameter space to pass to the query
+    const pList: HasParameter[] = [];
+    if (parameterSpace) {
+      for (const [_name, entry] of parameterSpace.entries()) {
+        if (entry instanceof AbstractParameter) {
+          pList.push(entry.astParam);
+        }
+      }
+    }
+    return this.withParameters(parameterSpace, pList);
   }
 
   withParameters(
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
   ): SourceDef {
+    // Pass parameter space to supported query elements
+    assignParameterSpace(this.query, parameterSpace);
     const comp = this.query.queryComp(false);
     const queryStruct: QuerySourceDef = {
       ...comp.outputStruct,

@@ -43,10 +43,13 @@ import {extendNoteMethod} from '../types/noteable';
 import type {MakeEntry} from '../types/space-entry';
 import type {SourceQueryElement} from '../source-query-elements/source-query-element';
 import {ErrorFactory} from '../error-factory';
-import type {ParameterSpace} from '../field-space/parameter-space';
+import {ParameterSpace} from '../field-space/parameter-space';
 import type {QueryPropertyInterface} from '../types/query-property-interface';
 import {LegalRefinementStage} from '../types/query-property-interface';
 import {mergeFieldUsage} from '../../composite-source-utils';
+import {NamedSource} from '../source-elements/named-source';
+import {HasParameter} from '../parameters/has-parameter';
+import {AbstractParameter} from '../types/space-param';
 
 export abstract class Join
   extends MalloyElement
@@ -214,7 +217,46 @@ export class ExpressionJoin extends Join {
       );
       return ErrorFactory.joinDef;
     }
-    const sourceDef = source.getSourceDef(parameterSpace);
+
+    // For joins with source arguments, we need to ensure the parameter space
+    // includes parameters from the outer scope. The source arguments should
+    // be able to reference parameters from the outer scope.
+    let mergedParameterSpace = parameterSpace;
+
+    // If this is a NamedSource with arguments, we need to merge the outer
+    // parameter space with the source's parameters
+    if (source instanceof NamedSource && source.args) {
+      const sourceModel = source.modelStruct();
+      if (sourceModel && sourceModel.parameters) {
+        // Extract parameters from the source model
+        const sourceParams: HasParameter[] = [];
+        for (const [paramName, paramDef] of Object.entries(
+          sourceModel.parameters
+        )) {
+          sourceParams.push(
+            new HasParameter({
+              name: paramName,
+              typeDef: paramDef,
+              default: undefined,
+            })
+          );
+        }
+
+        // Extract parameters from the outer parameter space
+        const outerParams: HasParameter[] = [];
+        for (const [_name, entry] of parameterSpace.entries()) {
+          if (entry instanceof AbstractParameter) {
+            outerParams.push(entry.astParam);
+          }
+        }
+
+        // Merge parameters: outer first, then source (outer takes precedence)
+        const allParams = [...outerParams, ...sourceParams];
+        mergedParameterSpace = new ParameterSpace(allParams);
+      }
+    }
+
+    const sourceDef = source.getSourceDef(mergedParameterSpace);
     let matrixOperation: MatrixOperation = 'left';
     if (this.inExperiment('join_types', true)) {
       matrixOperation = this.matrixOperation;

@@ -22,6 +22,7 @@
  */
 
 import * as model from '../../../model/malloy_types';
+import {isSourceDef} from '../../../model/malloy_types';
 import {mergeFields, nameFromDef} from '../../field-utils';
 import type {
   FieldSpace,
@@ -374,6 +375,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
   // This returns the OUTPUT struct of this query space
   structDef(): model.SourceDef {
     const fields = this.translateQueryFields();
+    const inputStruct = this.inputSpace().structDef();
     const sourceDef: model.SourceDef = {
       type: 'query_result',
       // TODO to match the compiler, does this need to be the name of the query?
@@ -385,6 +387,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
         this.getOutputFieldDef(f.queryFieldDef, f.typeDesc)
       ),
       primaryKey: this.getPrimaryKey(fields),
+      parameters: isSourceDef(inputStruct) ? inputStruct.parameters : undefined,
     };
     return sourceDef;
   }

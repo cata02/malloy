@@ -31,6 +31,7 @@ import type {QueryElement} from '../types/query-element';
 import {QueryBase} from './query-base';
 import type {View} from '../view-elements/view';
 import {checkRequiredGroupBys} from '../../composite-source-utils';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A query operation that adds segments to a LHS source or query.
@@ -42,7 +43,8 @@ export class QueryArrow extends QueryBase implements QueryElement {
 
   constructor(
     readonly source: Source | QueryElement,
-    readonly view: View
+    readonly view: View,
+    public parameterSpace?: ParameterSpace
   ) {
     super({source, view});
   }
@@ -55,8 +57,8 @@ export class QueryArrow extends QueryBase implements QueryElement {
       // We create a fresh query with either the QOPDesc as the head,
       // the view as the head, or the scalar as the head (if scalar lenses is enabled)
       const invoked = isRefOk
-        ? this.source.structRef(undefined)
-        : {structRef: this.source.getSourceDef(undefined)};
+        ? this.source.structRef(this.parameterSpace)
+        : {structRef: this.source.getSourceDef(this.parameterSpace)};
       queryBase = {
         type: 'query',
         ...invoked,
@@ -65,7 +67,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
       };
       inputStruct = refIsStructDef(invoked.structRef)
         ? invoked.structRef
-        : this.source.getSourceDef(undefined);
+        : this.source.getSourceDef(this.parameterSpace);
       fieldSpace = new StaticSourceSpace(inputStruct, 'public');
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment

@@ -242,7 +242,7 @@ describe('parameters', () => {
       'n.param_value_3': 10,
     });
   });
-  it.skip('can pass param into joined source from query', async () => {
+  it('can pass param into joined source from query', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(
@@ -371,6 +371,218 @@ describe('parameters', () => {
       `
     ).malloyResultMatches(runtime, {param_value: 10});
   });
+
+  it('propagates param through single-stage view', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        view: single_stage is {
+          group_by: state
+          where: state = state_filter
+        }
+      }
+      run: state_facts(state_filter is "CA") -> single_stage
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('uses param in aggregate expressions across stages', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: ct(offset::number) is duckdb.table('malloytest.state_facts') extend {
+        view: aggregate_stage is {
+          group_by: state
+          aggregate: count_filtered is count() + offset
+          where: state = 'CA'
+        } -> {
+          limit: 10
+          where: offset >= 0
+        }
+      }
+      run: ct(offset is 2) -> aggregate_stage
+    `).malloyResultMatches(runtime, {state: 'CA', count_filtered: 3});
+  });
+
+  it('works with param in join conditions across stages', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: test_source(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        join_many: other is duckdb.table('malloytest.state_facts') on other.state = state_filter
+        view: join_stage is {
+          group_by: state
+        } -> {
+          limit: 10
+          where: state = state_filter
+        }
+      }
+      run: test_source(state_filter is 'CA') -> join_stage
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('works with parameters in three pipeline stages', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(filter_param::string) is duckdb.table('malloytest.state_facts') extend {
+        view: three_stages is {
+          group_by: state
+        } -> {
+          group_by: state
+        } -> {
+          select: *
+          limit: 10
+          where: state = filter_param
+        }
+      }
+      run: state_facts(filter_param is 'CA') -> three_stages
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('works when parameter is only in last pipeline stage', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(filter_val::string is 'default') is duckdb.table('malloytest.state_facts') extend {
+        view: last_stage_param is {
+          group_by: state
+          aggregate: total is count()
+        } -> {
+          group_by: state, total
+        } -> {
+          select: *
+          where: state = filter_val
+        }
+      }
+      run: state_facts(filter_val is 'CA') -> last_stage_param
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('works with join_one parameterized source with pipeline', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
+        where: state = state_filter
+      }
+
+      source: state_facts2(state_filter2::string) is duckdb.table('malloytest.state_facts') extend {
+        join_one: filtered_facts is state_facts(state_filter is state_filter2) -> { select: * }
+      }
+
+      run: state_facts2(state_filter2 is 'CA') -> {
+        group_by:
+          s1 is state,
+          s2 is filtered_facts.state
+        aggregate: c is count()
+      }
+    `).malloyResultMatches(runtime, {s1: 'CA', s2: 'CA', c: 1});
+  });
+
+  it('join_one with pipeline where inner stage references param', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(
+        state_filter::string
+      ) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
+        where: state = state_filter
+      }
+
+      source: state_facts3(state_filter3::string) is duckdb.table('malloytest.state_facts') extend {
+        join_one: filtered is state_facts(state_filter is state_filter3) -> {
+          select: *
+        }
+      }
+
+      run: state_facts3(state_filter3 is 'CA') -> {
+        group_by:
+          s is filtered.state
+        aggregate: c is count()
+      }
+    `).malloyResultMatches(runtime, {s: 'CA', c: 1});
+  });
+
+  it('join_one simple source with pipeline referencing outer param', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: sf_outer(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
+        join_one: sf is duckdb.table('malloytest.state_facts') -> {
+          select: *
+          where: state = state_filter
+        }
+      }
+      run: sf_outer(state_filter is "CA") -> {
+        group_by: s is sf.state
+        aggregate: c is count()
+      }
+    `).malloyResultMatches(runtime, {s: 'CA', c: 1});
+  });
+
+  it('refine uses in-scope parameter', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        view: base is {
+          group_by: state
+          aggregate: c is count()
+        }
+      }
+      run: state_facts(state_filter is 'CA') -> base + { where: state = state_filter }
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('refine with missing parameter errors', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        view: base is {
+          group_by: state
+          where: state = state_filter
+        }
+      }
+      run: state_facts(state_filter is 'CA') -> base + { where: state = missing_param }
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('basic refine operation works', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
+        view: base is {
+          group_by: state
+          where: state = state_filter
+        }
+      }
+      run: state_facts(state_filter is 'CA') -> base + { limit: 1 }
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('filter expression parameters work', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(state_filter::filter<string>) is duckdb.table('malloytest.state_facts') extend {
+        where: state ~ state_filter
+      }
+      run: state_facts(state_filter is f'CA') -> { group_by: state }
+    `).malloyResultMatches(runtime, {state: 'CA'});
+  });
+
+  it('multiple parameters in one source', async () => {
+    await expect(`
+      ##! experimental.parameters
+      source: state_facts(
+        state_filter::string,
+        min_count::number
+      ) is duckdb.table('malloytest.state_facts') extend {
+        where: state = state_filter
+        view: filtered is {
+          group_by: state
+          aggregate: c is count()
+          having: c >= min_count
+        }
+      }
+      run: state_facts(state_filter is 'CA', min_count is 1) -> filtered
+    `).malloyResultMatches(runtime, {state: 'CA', c: 1});
+  });
+
   // TODO fix this when we redo namespaces
   it.skip('default value not passed through extension propagates, with composite source', async () => {
     await expect(

@@ -29,6 +29,7 @@ import {QueryHeadStruct} from './query-head-struct';
 import type {Query} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import type {QueryElement} from '../types/query-element';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A query operation that is just a reference to an existing query.
@@ -38,7 +39,10 @@ import type {QueryElement} from '../types/query-element';
 export class QueryReference extends MalloyElement implements QueryElement {
   elementType = 'query-reference';
 
-  constructor(readonly name: ModelEntryReference) {
+  constructor(
+    readonly name: ModelEntryReference,
+    public parameterSpace?: ParameterSpace
+  ) {
     super();
   }
 
@@ -65,7 +69,7 @@ export class QueryReference extends MalloyElement implements QueryElement {
         query.sourceArguments
       );
       this.has({queryHead: queryHead});
-      const inputStruct = queryHead.getSourceDef(undefined);
+      const inputStruct = queryHead.getSourceDef(this.parameterSpace);
       const outputStruct =
         query.pipeline[query.pipeline.length - 1].outputStruct;
       const unRefedQuery = isRefOk

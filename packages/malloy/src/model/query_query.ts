@@ -2040,7 +2040,7 @@ export class QueryQuery extends QueryField {
           : {model: this.parent.getModel()};
         const s = new QueryStruct(
           structDef,
-          undefined,
+          this.parent.sourceArguments,
           parent,
           this.parent.prepareResultOptions
         );

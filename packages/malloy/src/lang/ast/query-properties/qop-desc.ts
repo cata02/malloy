@@ -35,6 +35,10 @@ import {QueryClass} from '../types/query-property-interface';
 import {PartialBuilder} from '../query-builders/partial-builder';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
 import {modernizeTermsForUserText} from '../../utils';
+import {
+  isIllegalRefineTransition,
+  segmentTypeFromPipeSegment,
+} from '../query-elements/query-class-policy';
 
 export class QOpDesc extends ListOf<QueryProperty> {
   elementType = 'queryOperation';
@@ -45,18 +49,21 @@ export class QOpDesc extends ListOf<QueryProperty> {
     let guessType: QueryClass | undefined;
     let needsExplicitQueryClass = false;
     if (this.refineThis) {
-      if (this.refineThis.type === 'reduce') {
-        guessType = QueryClass.Grouping;
-      } else if (this.refineThis.type === 'project') {
-        guessType = QueryClass.Project;
-      } else if (this.refineThis.type === 'index') {
-        guessType = QueryClass.Index;
-      }
+      const seg = segmentTypeFromPipeSegment(this.refineThis);
+      if (seg === 'reduce') guessType = QueryClass.Grouping;
+      else if (seg === 'project') guessType = QueryClass.Project;
+      else if (seg === 'index') guessType = QueryClass.Index;
     }
     for (const el of this.list) {
       if (el.forceQueryClass) {
         if (guessType) {
-          if (guessType !== el.forceQueryClass) {
+          const illegalRefine =
+            this.refineThis &&
+            isIllegalRefineTransition(
+              segmentTypeFromPipeSegment(this.refineThis),
+              el.forceQueryClass
+            );
+          if (guessType !== el.forceQueryClass && illegalRefine) {
             el.logError(
               `illegal-${guessType}-operation`,
               `Use of ${modernizeTermsForUserText(

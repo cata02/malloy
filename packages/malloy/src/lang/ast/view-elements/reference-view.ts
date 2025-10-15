@@ -28,6 +28,7 @@ import {
   isAtomic,
   isQuerySegment,
   isRawSegment,
+  isSourceDef,
   isTurtle,
   sourceBase,
 } from '../../../model/malloy_types';
@@ -97,6 +98,9 @@ export class ReferenceView extends View {
         type: 'query_result',
         name,
         fields: [fieldDef],
+        parameters: isSourceDef(fs.structDef())
+          ? fs.structDef().parameters
+          : undefined,
       };
       const newSegment: PipeSegment = {
         type: 'reduce',

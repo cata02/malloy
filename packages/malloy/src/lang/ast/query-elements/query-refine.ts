@@ -26,6 +26,8 @@ import type {QueryComp} from '../types/query-comp';
 import type {QueryElement} from '../types/query-element';
 import type {View} from '../view-elements/view';
 import {QueryBase} from './query-base';
+import type {ParameterSpace} from '../field-space/parameter-space';
+import {assignParameterSpace} from './parameter-space';
 
 /**
  * A query operation that consists of an exisitng query with refinements.
@@ -37,12 +39,15 @@ export class QueryRefine extends QueryBase implements QueryElement {
 
   constructor(
     readonly base: QueryElement,
-    readonly refinement: View
+    readonly refinement: View,
+    public parameterSpace?: ParameterSpace
   ) {
     super({base, refinement});
   }
 
   queryComp(isRefOk: boolean): QueryComp {
+    // Pass parameter space to the base query if it supports it
+    assignParameterSpace(this.base, this.parameterSpace);
     const q = this.base.queryComp(isRefOk);
     const inputFS = new StaticSourceSpace(q.inputStruct, 'public');
     const pipeline = this.refinement.refine(
