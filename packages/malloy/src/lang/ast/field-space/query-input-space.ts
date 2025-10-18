@@ -35,6 +35,7 @@ import {Join} from '../source-properties/join';
 import type {QueryFieldSpace} from '../types/field-space';
 import type {QueryOperationSpace} from './query-spaces';
 import {RefinedSpace} from './refined-space';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   extendList: string[] = [];
@@ -76,6 +77,14 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
 
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
+  }
+
+  parameterSpace(): ParameterSpace {
+    const provided = this.queryOutput.parameterSpace?.();
+    if (provided) {
+      return provided;
+    }
+    return super.parameterSpace();
   }
 
   isQueryOutputSpace() {

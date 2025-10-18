@@ -10,6 +10,7 @@ import {
   exprHasE,
   expressionIsAggregate,
   hasExpression,
+  getIdentifier,
 } from './malloy_types';
 import type {
   Expr,
@@ -291,7 +292,6 @@ function generateAppliedFilter(
   }
   if (filterExpr.node === 'parameter') {
     const name = filterExpr.path[0];
-    context.eventStream?.emit('source-argument-compiled', {name});
     const argument = context.arguments()[name];
     if (argument.value) {
       filterExpr = argument.value;
@@ -756,10 +756,45 @@ export function generateParameterFragment(
   state: GenerateState
 ): string {
   const name = expr.path[0];
-  context.eventStream?.emit('source-argument-compiled', {name});
+  // Only rely on context.arguments() for parameter values
   const argument = context.arguments()[name];
-  if (argument.value) {
-    return exprToSQL(resultSet, context, argument.value, state);
+  if (process.env['MALLOY_DEBUG_ARGS']) {
+    // eslint-disable-next-line no-console
+    try {
+      const args = context.arguments();
+      const nodes: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(args)) {
+        const vv: any = (v as any)?.value;
+        nodes[k] = vv?.node ?? (vv === null ? null : typeof vv);
+      }
+      const sourceArgKeys = Object.keys((context as any).sourceArguments || {});
+      const sourceArgNodes: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(
+        (context as any).sourceArguments || {}
+      )) {
+        const vv: any = (v as any)?.value;
+        sourceArgNodes[k] = vv?.node ?? (vv === null ? null : typeof vv);
+      }
+      console.log('[malloy debug] generateParameterFragment', {
+        name,
+        hasArgument: !!argument,
+        argumentValue: argument?.value,
+        availableArgs: Object.keys(args),
+        contextArgValueNodes: nodes,
+        contextSourceArgKeys: sourceArgKeys,
+        contextSourceArgNodes: sourceArgNodes,
+        contextScope: getIdentifier((context as any).structDef),
+      });
+    } catch (_e) {
+      console.log(
+        '[malloy debug] generateParameterFragment (args snapshot failed)',
+        _e
+      );
+    }
+  }
+  let value = argument?.value;
+  if (value) {
+    return exprToSQL(resultSet, context, value, state);
   }
   throw new Error(`Can't generate SQL, no value for ${expr.path}`);
 }

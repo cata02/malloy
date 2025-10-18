@@ -48,11 +48,17 @@ export class QueryRefine extends QueryBase implements QueryElement {
   queryComp(isRefOk: boolean): QueryComp {
     // Pass parameter space to the base query if it supports it
     assignParameterSpace(this.base, this.parameterSpace);
+    this.refinement.assignParameterSpace(this.parameterSpace);
     const q = this.base.queryComp(isRefOk);
-    const inputFS = new StaticSourceSpace(q.inputStruct, 'public');
+    const inputFS = new StaticSourceSpace(
+      q.inputStruct,
+      'public',
+      this.parameterSpace
+    );
     const pipeline = this.refinement.refine(
       inputFS,
       q.query.pipeline,
+      this.parameterSpace,
       undefined
     );
     const query = {

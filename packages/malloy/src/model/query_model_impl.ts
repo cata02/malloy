@@ -105,8 +105,17 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
       }
       return ret;
     }
+    const refWithArgs = sourceArguments
+      ? ({
+          ...(structRef as any),
+          arguments: {
+            ...((structRef as any).arguments || {}),
+            ...sourceArguments,
+          },
+        } as any)
+      : (structRef as any);
     return new QueryStruct(
-      structRef,
+      refWithArgs,
       sourceArguments,
       {model: this},
       prepareResultOptions
@@ -128,6 +137,32 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
       query.sourceArguments,
       prepareResultOptions
     );
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] getStructFromRef source args', {
+        when: 'after',
+        asString: typeof structRef === 'string',
+        structName: typeof structRef === 'string' ? structRef : structRef.name,
+        passedArgKeys: Object.keys(query.sourceArguments || {}),
+        passedArgValues: query.sourceArguments,
+      });
+    }
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] loadQuery root', {
+        structName: typeof structRef === 'string' ? structRef : structRef.name,
+        structType: typeof structRef === 'string' ? 'named' : structRef.type,
+        sourceArgsKeys: Object.keys(query.sourceArguments || {}),
+        queryParamKeys:
+          typeof structRef === 'string'
+            ? Object.keys(
+                (this.getStructByName(structRef).structDef as any).parameters ||
+                  {}
+              )
+            : Object.keys(((structRef as any).parameters as any) || {}),
+        sourceArgsValues: query.sourceArguments,
+      });
+    }
 
     // If this query is being written as part of a SQL block don't use CTE (WITH ...)
     const noCTE =
@@ -181,6 +216,7 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
       stageWriter,
       structs: [ret.outputStruct],
       connectionName: q.parent.connectionName,
+      sourceArguments: ret.sourceArguments ?? query.sourceArguments,
     };
   }
 

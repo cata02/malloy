@@ -776,15 +776,17 @@ describe('parameters', () => {
     test('join_one simple source with pipeline referencing outer param', () => {
       expect(`
         ##! experimental.parameters
-        source: inner_source is ab
-        source: outer(param_filter::string) is ab extend {
-          join_one: inner_alias is inner_source -> {
+        source: inner_source(param_filter::string) is ab extend {
+          view: filtered is {
             select: *
-            where: ai = param_filter
+            where: astr = param_filter
           }
         }
+        source: outer(param_filter::string) is ab extend {
+          join_one: inner_alias is inner_source(param_filter)
+        }
         run: outer(param_filter is 'CA') -> {
-          group_by: inner_alias.ai
+          group_by: inner_alias.astr
         }
       `).toTranslate();
     });
@@ -951,6 +953,58 @@ describe('parameters', () => {
           }
         }
         run: test_source(param1 is 'foo', param2 is 5) -> middle_wildcard
+      `).toTranslate();
+    });
+  });
+
+  // Join-in-view scenarios: pass param to join source, use in ON, and inside join pipeline
+  describe('Join-in-view with parameter usage', () => {
+    test('join passes param into parameterized joined source (view stage)', () => {
+      expect(`
+        ##! experimental.parameters
+        source: inner_source(param2::string) is ab extend {
+          where: astr = param2
+          view: passthrough is { group_by: astr }
+        }
+        source: sf(param::string) is ab extend {
+          view: v is {
+            group_by: astr
+            join_one: j is inner_source(param2 is param) -> passthrough
+          }
+        }
+        run: sf(param is 'CA') -> v
+      `).toTranslate();
+    });
+
+    test('join ON clause uses param (view stage)', () => {
+      expect(`
+        ##! experimental.parameters
+        source: sf(p::string) is ab extend {
+          view: v is {
+            group_by: astr
+            join_one: j is ab on j.astr = p
+          }
+        }
+        run: sf(p is 'CA') -> v
+      `).toTranslate();
+    });
+
+    test('join inner pipeline references param (view stage)', () => {
+      expect(`
+        ##! experimental.parameters
+        source: inner_source(p_inner::string) is ab extend {
+          view: filtered is {
+            group_by: astr
+            where: astr = p_inner
+          }
+        }
+        source: sf(p::string) is ab extend {
+          view: v is {
+            group_by: astr
+            join_one: j is inner_source(p_inner is p) -> filtered
+          }
+        }
+        run: sf(p is 'CA') -> v
       `).toTranslate();
     });
   });

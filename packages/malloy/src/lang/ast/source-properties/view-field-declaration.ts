@@ -31,6 +31,7 @@ import {extendNoteMethod} from '../types/noteable';
 import {detectAndRemovePartialStages} from '../query-utils';
 import {ASTViewField} from '../field-space/ast-view-field';
 import type {MakeEntry} from '../types/space-entry';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 export class ViewFieldDeclaration
   extends MalloyElement
@@ -49,7 +50,7 @@ export class ViewFieldDeclaration
   }
 
   makeEntry(fs: DynamicSpace) {
-    const qf = new ASTViewField(fs, this, this.name);
+    const qf = new ASTViewField(fs, this, this.name, fs.parameterSpace());
     fs.newEntry(this.name, this, qf);
   }
 
@@ -57,8 +58,11 @@ export class ViewFieldDeclaration
     return this.name;
   }
 
-  getFieldDef(fs: FieldSpace): model.TurtleDef {
-    const {pipeline, annotation} = this.view.pipelineComp(fs);
+  getFieldDef(
+    fs: FieldSpace,
+    parameterSpace: ParameterSpace | undefined
+  ): model.TurtleDef {
+    const {pipeline, annotation} = this.view.pipelineComp(fs, parameterSpace);
     const checkedPipeline = detectAndRemovePartialStages(pipeline, this);
     const def: model.TurtleDef = {
       type: 'turtle',

@@ -17,6 +17,8 @@ import type {
 import {isAtomic, isJoined, isSourceDef, TD} from '../../../model/malloy_types';
 
 import type {HasParameter} from '../parameters/has-parameter';
+import {AbstractParameter} from '../types/space-param';
+import type {Parameter} from '../../../model/malloy_types';
 import {Source} from './source';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import type {MalloyElement} from '../types/malloy-element';
@@ -47,7 +49,7 @@ export class CompositeSource extends Source {
         logTo: source,
       };
     });
-    return composeSources(sourceDefs, this);
+    return composeSources(sourceDefs, this, parameterSpace);
   }
 }
 
@@ -56,7 +58,8 @@ function composeSources(
     sourceDef: SourceDef;
     logTo: MalloyElement;
   }[],
-  compositeCodeSource: MalloyElement
+  compositeCodeSource: MalloyElement,
+  parameterSpace: ParameterSpace | undefined
 ): SourceDef {
   const connection = sources[0].sourceDef.connection;
   const dialect = sources[0].sourceDef.dialect;
@@ -184,7 +187,8 @@ function composeSources(
         sourceDef: s,
         logTo: compositeCodeSource,
       })),
-      compositeCodeSource
+      compositeCodeSource,
+      parameterSpace
     ) as SourceDef & JoinFieldDef;
     const compositeJoin = {
       ...composedSource,
@@ -209,8 +213,18 @@ function composeSources(
     fields: [...fieldsByName.values()],
     dialect,
     name,
-    // TODO actually compose the parameters?
-    parameters: sources[0].sourceDef.parameters,
+    parameters:
+      sources[0].sourceDef.parameters ??
+      (parameterSpace
+        ? Object.fromEntries(
+            Array.from(parameterSpace.entries())
+              .filter(([, entry]) => entry instanceof AbstractParameter)
+              .map(([key, entry]) => [
+                key,
+                (entry as AbstractParameter).parameter(),
+              ])
+          )
+        : undefined),
   };
 }
 

@@ -12,7 +12,7 @@ Assumes that postgres has been installed via nix (installs but doesn't configure
 
 ADD to environment: `export PGHOST=localhost`
 
-**postgres_init.sh** - builds a database as the current user in .tmp/data/malloytestdb. Starts server running on localhost:5432
+**postgres_init.sh** - builds a database as the current user in .tmp/data/malloytestdb. Starts server running on localhost:5433
 copies the test data in `malloytest-postgres.sql.gz` into the database. - You may also need to add state_facts.sql for some tests
 
 **postgres_start.sh** - starts the postgres server, once it has been installed (use after a reboot, for example)

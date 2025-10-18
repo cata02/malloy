@@ -49,8 +49,12 @@ export class NestFieldDeclaration
   getFieldDef(fs: FieldSpace): model.TurtleDef {
     if (this.turtleDef) return this.turtleDef;
     if (fs.isQueryFieldSpace()) {
+      const parameterSpace = fs.parameterSpace
+        ? fs.parameterSpace()
+        : undefined;
       const {pipeline, annotation} = this.view.pipelineComp(
         fs,
+        parameterSpace,
         fs.outputSpace()
       );
       const fieldUsage =

@@ -32,6 +32,7 @@ import type {
 import {FieldName} from '../types/field-space';
 import type {MalloyElement} from '../types/malloy-element';
 import {SpaceField} from '../types/space-field';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 import {
   RefineFromFieldReference,
@@ -138,6 +139,14 @@ export abstract class QueryOperationSpace
 
   outputSpace(): QueryOperationSpace {
     return this;
+  }
+
+  parameterSpace(): ParameterSpace {
+    const provided = this.queryInputSpace.parameterSpace?.();
+    if (provided) {
+      return provided;
+    }
+    return super.parameterSpace();
   }
 
   isQueryOutputSpace() {

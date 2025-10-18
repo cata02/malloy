@@ -29,6 +29,7 @@ export interface QueryResults {
   structs: SourceDef[];
   malloy: string;
   connectionName: string;
+  sourceArguments?: Record<string, Argument>;
 }
 
 export interface QueryModel {

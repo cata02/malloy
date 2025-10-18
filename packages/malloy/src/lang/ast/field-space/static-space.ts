@@ -41,6 +41,9 @@ import type {
   SourceFieldSpace,
 } from '../types/field-space';
 import {DefinedParameter} from '../types/space-param';
+import type {ParameterSpace} from './parameter-space';
+import {ParameterSpace as ParameterSpaceImpl} from './parameter-space';
+import {HasParameter} from '../parameters/has-parameter';
 import {SpaceField} from '../types/space-field';
 import {StructSpaceFieldBase} from './struct-space-field-base';
 import {ColumnSpaceField} from './column-space-field';
@@ -267,7 +270,8 @@ export class StructSpaceField extends StructSpaceFieldBase {
 export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
   constructor(
     protected source: SourceDef,
-    public readonly _accessProtectionLevel: AccessModifierLabel
+    public readonly _accessProtectionLevel: AccessModifierLabel,
+    readonly parameterSpaceRef?: ParameterSpace
   ) {
     super(source, source.dialect, source.connection);
   }
@@ -283,6 +287,44 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
 
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
+  }
+
+  parameterSpace(): ParameterSpace {
+    if (this.parameterSpaceRef) {
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log('[malloy args] static-space reuse', {
+          source: this.source.name ?? this.source.type,
+          parameterKeys: this.parameterSpaceRef
+            ? this.parameterSpaceRef.parameterNames()
+            : [],
+        });
+      }
+      return this.parameterSpaceRef;
+    }
+    const parameters: HasParameter[] = [];
+    if (this.source.parameters) {
+      for (const [paramName, paramDef] of Object.entries(
+        this.source.parameters
+      )) {
+        parameters.push(
+          new HasParameter({
+            name: paramName,
+            typeDef: paramDef,
+            default: undefined,
+          })
+        );
+      }
+    }
+    const paramSpace = new ParameterSpaceImpl(parameters);
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy args] static-space new', {
+        source: this.source.name ?? this.source.type,
+        parameterKeys: parameters.map(p => p.name),
+      });
+    }
+    return paramSpace;
   }
 }
 

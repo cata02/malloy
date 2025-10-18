@@ -28,6 +28,21 @@ import type {
   Expression,
   TurtleDefPlusFilters,
   UniqueKeyRequirement,
+  BooleanFieldDef,
+  DateFieldDef,
+  StringFieldDef,
+  JSONFieldDef,
+  NumberFieldDef,
+  TimestampFieldDef,
+  NativeUnsupportedFieldDef,
+  JoinFieldDef,
+  PrepareResultOptions,
+  AtomicFieldDef,
+  BasicAtomicDef,
+  FilterCondition,
+  Parameter,
+  SourceDef,
+  Query,
 } from './malloy_types';
 import {
   isRawSegment,
@@ -73,6 +88,10 @@ import {
 } from './field_instance';
 import type * as Malloy from '@malloydata/malloy-interfaces';
 import {shouldMaterialize} from './materialization/utils';
+import type {Argument} from './malloy_types';
+import {QueryModelImpl} from './query_model_impl';
+import type {QueryResults} from './query_model_contract';
+import {debugLog} from '../util/debug_log';
 
 function pathToCol(path: string[]): string {
   return path.map(el => encodeURIComponent(el)).join('/');
@@ -148,6 +167,17 @@ export class QueryQuery extends QueryField {
     isJoinedSubquery: boolean,
     lookupStruct: (name: string) => QueryStruct | undefined
   ): QueryQuery {
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] QueryQuery.makeQuery', {
+        parentStructName: parentStruct.structDef.name,
+        parentStructType: parentStruct.structDef.type,
+        parentArgs: Object.keys(parentStruct.sourceArguments || {}),
+        parentArgValues: parentStruct.sourceArguments,
+        isJoinedSubquery,
+        pipelineLength: fieldDef.pipeline?.length || 0,
+      });
+    }
     let parent = parentStruct;
 
     let turtleWithFilters =
@@ -169,7 +199,8 @@ export class QueryQuery extends QueryField {
           ...sourceDef,
           fields: [...sourceDef.fields, ...firstStage.extendSource],
         },
-        parentStruct.sourceArguments,
+        // Use evaluated arguments to ensure concrete values at SQL time
+        parentStruct.arguments(),
         parent.parent ? {struct: parent} : {model: parent.model},
         parent.prepareResultOptions
       );
@@ -461,10 +492,36 @@ export class QueryQuery extends QueryField {
     which: 'where' | 'having'
     // filterList: FilterCondition[] | undefined = undefined
   ): AndChain {
+    // No SQL-time argument injection; rely on context.arguments()
     const resultFilters = new AndChain();
     const list = resultStruct.firstSegment.filterList;
     if (list === undefined) {
       return resultFilters;
+    }
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      try {
+        const ctx = this.parent;
+        const vals: Record<string, unknown> = {};
+        const args = ctx.arguments();
+        for (const [k, v] of Object.entries(args)) {
+          const vv: any = (v as any)?.value;
+          vals[k] = vv?.node ?? (vv === null ? null : typeof vv);
+        }
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] generateSQLFilters context args', {
+          whereOrHaving: which,
+          scope: ctx.structDef.name ?? ctx.structDef.type,
+          keys: Object.keys(args),
+          valueNodes: vals,
+          ctxSAKeys: Object.keys(
+            (ctx as any).sourceArguments ||
+              (ctx as any)._runtimeSourceArguments ||
+              {}
+          ),
+        });
+      } catch (_e) {
+        // ignore
+      }
     }
     // Go through the filters and make or find dependant fields
     //  add them to the field index. Place the individual filters
@@ -488,6 +545,7 @@ export class QueryQuery extends QueryField {
       this.expandRecordExpressions(this.rootResult, this.parent);
       // Add the root base join to the joins map
       this.rootResult.addStructToJoin(this.parent, undefined);
+      // Keep evaluation source-of-truth in arguments(); do not attach runtime bags
 
       // Expand fields (just adds them to result, no dependency tracking)
       this.expandFields(this.rootResult);
@@ -620,7 +678,8 @@ export class QueryQuery extends QueryField {
         const {structDef, repeatedResultType} = this.generateTurtlePipelineSQL(
           fi,
           new StageWriter(true, undefined),
-          '<nosource>'
+          '<nosource>',
+          this.parent.arguments()
         );
 
         // Get the timezone from the nested query
@@ -799,16 +858,206 @@ export class QueryQuery extends QueryField {
                 `Unexpected reference to an undefined source '${structRef}'`
               );
             }
-            sourceStruct = struct;
+            // Create a new QueryStruct with the query source's arguments and parent
+            // so parameter references can be resolved correctly
+            // Resolve any parameter references in the arguments using qs.parent chain
+            const rawArgs = query.sourceArguments || {};
+            const effectiveArgs: Record<string, Argument> = {};
+            for (const [argName, argVal] of Object.entries(rawArgs)) {
+              let value = argVal.value;
+              // Resolve parameter references by walking up the parent chain
+              if (value?.node === 'parameter' && qs.parent) {
+                const refName = value.path[0];
+                let cur: QueryStruct | undefined = qs.parent;
+                while (cur) {
+                  const parentArgs = cur.arguments();
+                  if (parentArgs[refName]?.value) {
+                    value = parentArgs[refName].value;
+                    break;
+                  }
+                  cur = cur.parent;
+                }
+              }
+              effectiveArgs[argName] = {...argVal, value};
+            }
+            sourceStruct = new QueryStruct(
+              struct.structDef,
+              effectiveArgs,
+              {struct: qs},
+              qs.prepareResultOptions
+            );
           } else {
+            if (process.env['MALLOY_DEBUG_ARGS']) {
+              // eslint-disable-next-line no-console
+              console.log('[malloy debug] getStructSourceSQL query_source', {
+                structName: structRef.name,
+                structType: structRef.type,
+                querySourceArguments: Object.keys(query.sourceArguments || {}),
+                qsSourceArguments: Object.keys(qs.sourceArguments || {}),
+                qsStructDefArguments: Object.keys(qs.structDef.arguments || {}),
+                querySourceArgumentsValues: query.sourceArguments,
+                qsSourceArgumentsValues: qs.sourceArguments,
+              });
+            }
+            // Prefer arguments on the join field struct (qs.structDef.arguments),
+            // then structRef.arguments, then query.sourceArguments
+            const baseArgs: Record<string, any> =
+              ((qs.structDef as any).arguments as Record<string, any>) ||
+              ((structRef as any).arguments as Record<string, any>) ||
+              query.sourceArguments ||
+              {} ||
+              {};
+            const effectiveArgs: Record<string, any> = {...baseArgs};
+            if (process.env['MALLOY_DEBUG_ARGS']) {
+              // eslint-disable-next-line no-console
+              console.log('[malloy debug] getStructSourceSQL baseArgs', {
+                keys: Object.keys(baseArgs),
+                values: baseArgs,
+                parentArgsKeys: qs.parent
+                  ? Object.keys(qs.parent.arguments?.() || {})
+                  : [],
+              });
+            }
+            // Ensure any keys missing in effectiveArgs are pulled from the join struct definition
+            const structArgs: Record<string, any> = (qs.structDef as any)
+              .arguments;
+            if (structArgs) {
+              for (const [k, v] of Object.entries(structArgs)) {
+                if ((effectiveArgs as any)[k] === undefined) {
+                  (effectiveArgs as any)[k] = v as any;
+                }
+              }
+            }
+            try {
+              // Resolve any parameter references in argument values using the join field's parent chain
+              const resolveFromParents = (refName: string): any | undefined => {
+                // Walk up the parent chain to find a concrete value (start at parent of the join field)
+                let cur: any = (qs as any).parent;
+                if (process.env['MALLOY_DEBUG_ARGS']) {
+                  try {
+                    const chain: any[] = [];
+                    let cur2: any = (qs as any).parent;
+                    while (cur2) {
+                      const args2: Record<string, any> = cur2.arguments();
+                      const found2 = args2?.[refName];
+                      const v2: any = (found2 as any)?.value;
+                      chain.push({
+                        scope: getIdentifier(cur2.structDef),
+                        has: !!found2,
+                        node: v2?.node ?? (v2 === null ? null : typeof v2),
+                      });
+                      cur2 = cur2.parent;
+                    }
+                    // eslint-disable-next-line no-console
+                    console.log(
+                      '[malloy debug] join resolveFromParents chain',
+                      {
+                        refName,
+                        chain,
+                      }
+                    );
+                  } catch (_e) {
+                    // ignore
+                  }
+                }
+                while (cur) {
+                  try {
+                    const args: Record<string, any> = cur.arguments();
+                    const found = args?.[refName];
+                    if (
+                      found &&
+                      found.value !== null &&
+                      found.value !== undefined
+                    ) {
+                      return found.value;
+                    }
+                  } catch (_e) {
+                    // ignore and continue walking up
+                  }
+                  cur = cur.parent;
+                }
+                return undefined;
+              };
+              for (const [an, aval] of Object.entries(effectiveArgs)) {
+                const v: any = (aval as any)?.value;
+                if (
+                  v &&
+                  v.node === 'parameter' &&
+                  Array.isArray(v.path) &&
+                  v.path.length > 0
+                ) {
+                  const refName = v.path[0] as string;
+                  const resolvedValue = resolveFromParents(refName);
+                  if (process.env['MALLOY_DEBUG_ARGS']) {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                      '[malloy debug] getStructSourceSQL resolving ref',
+                      {
+                        argName: an,
+                        refName,
+                        resolvedValueType: typeof resolvedValue,
+                        resolvedValueNode: resolvedValue?.node,
+                        parentArgsAtJoin: qs.parent
+                          ? Object.keys(qs.parent.arguments?.() || {})
+                          : [],
+                      }
+                    );
+                  }
+                  if (resolvedValue !== undefined) {
+                    (effectiveArgs as any)[an] = {
+                      ...(aval as any),
+                      value: resolvedValue,
+                    };
+                    if (process.env['MALLOY_DEBUG_ARGS']) {
+                      // eslint-disable-next-line no-console
+                      console.log(
+                        '[malloy debug] getStructSourceSQL resolved',
+                        {
+                          argName: an,
+                          refName,
+                          node:
+                            (resolvedValue as any)?.node ??
+                            (resolvedValue === null
+                              ? null
+                              : typeof resolvedValue),
+                        }
+                      );
+                    }
+                  }
+                }
+              }
+              if (process.env['MALLOY_DEBUG_ARGS']) {
+                // eslint-disable-next-line no-console
+                console.log('[malloy debug] getStructSourceSQL effectiveArgs', {
+                  keys: Object.keys(effectiveArgs),
+                  values: effectiveArgs,
+                });
+              }
+            } catch (_e) {
+              // best-effort resolution; fall back to original
+            }
             sourceStruct = new QueryStruct(
               structRef,
-              query.sourceArguments,
-              {model: this.parent.getModel()},
+              effectiveArgs,
+              {struct: qs},
               qs.prepareResultOptions
             );
           }
 
+          if (process.env['MALLOY_DEBUG_ARGS']) {
+            // eslint-disable-next-line no-console
+            console.log(
+              '[malloy debug] QueryQuery.makeQuery for query_source',
+              {
+                structName:
+                  typeof structRef === 'string' ? structRef : structRef.name,
+                sourceStructArgs: Object.keys(
+                  sourceStruct.sourceArguments || {}
+                ),
+                turtleDefPipeline: turtleDef.pipeline?.length || 0,
+              }
+            );
+          }
           const q = QueryQuery.makeQuery(
             turtleDef,
             sourceStruct,
@@ -857,6 +1106,29 @@ export class QueryQuery extends QueryField {
         throw new Error('Expected joined struct to have a parent.');
       }
       if (qsDef.onExpression) {
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          try {
+            const lhsArgs = Object.fromEntries(
+              Object.entries(qs.parent.arguments()).map(([k, v]: any) => [
+                k,
+                v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
+              ])
+            );
+            const rhsArgs = Object.fromEntries(
+              Object.entries(qs.arguments()).map(([k, v]: any) => [
+                k,
+                v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
+              ])
+            );
+            // eslint-disable-next-line no-console
+            console.log('[malloy debug] join on args', {
+              lhs: lhsArgs,
+              rhs: rhsArgs,
+            });
+          } catch (_e) {
+            // ignore
+          }
+        }
         // Create a temporary field instance to generate the SQL
         const boolField = new QueryFieldBoolean(
           {
@@ -1767,7 +2039,8 @@ export class QueryQuery extends QueryField {
         const {structDef, repeatedResultType} = this.generateTurtlePipelineSQL(
           field,
           new StageWriter(true, undefined),
-          '<nosource>'
+          '<nosource>',
+          this.parent.arguments()
         );
         if (repeatedResultType === 'nested') {
           const multiLineNest: RepeatedRecordDef = {
@@ -1905,7 +2178,8 @@ export class QueryQuery extends QueryField {
     const {structDef, pipeOut} = this.generateTurtlePipelineSQL(
       resultStruct,
       newStageWriter,
-      this.parent.dialect.supportUnnestArrayAgg ? ret : sqlFieldName
+      this.parent.dialect.supportUnnestArrayAgg ? ret : sqlFieldName,
+      this.parent.arguments()
     );
 
     // if there was a pipeline.
@@ -1934,7 +2208,8 @@ export class QueryQuery extends QueryField {
   generateTurtlePipelineSQL(
     fi: FieldInstanceResult,
     stageWriter: StageWriter,
-    sourceSQLExpression: string
+    sourceSQLExpression: string,
+    parentArgs: Record<string, Argument>
   ) {
     let structDef = this.getResultStructDef(fi, false);
     const repeatedResultType = fi.getRepeatedResultType();
@@ -1961,9 +2236,22 @@ export class QueryQuery extends QueryField {
         connection: structDef.connection,
         dialect: structDef.dialect,
       };
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[malloy debug] generateTurtlePipelineSQL creating QueryStruct',
+          {
+            structName: inputStruct.name,
+            structType: inputStruct.type,
+            parentArgs: Object.keys(parentArgs || {}),
+            pipelineLength: pipeline.length,
+            stack: new Error().stack?.split('\n').slice(1, 4).join('\n'),
+          }
+        );
+      }
       const qs = new QueryStruct(
         inputStruct,
-        undefined,
+        parentArgs,
         {model: this.parent.getModel()},
         this.parent.prepareResultOptions
       );
@@ -2020,14 +2308,30 @@ export class QueryQuery extends QueryField {
   generateSQLFromPipeline(stageWriter: StageWriter): {
     lastStageName: string;
     outputStruct: QueryResultDef;
+    sourceArguments?: Record<string, Argument>;
   } {
     this.parent.maybeEmitParameterizedSourceUsage();
     this.prepare(stageWriter);
     let lastStageName = this.generateSQL(stageWriter);
     let outputStruct = this.getResultStructDef();
     const pipeline = [...this.fieldDef.pipeline];
+    let capturedArgs: Record<string, Argument> | undefined;
     if (pipeline.length > 1) {
-      // console.log(pretty(outputStruct));
+      const initialPayload = {
+        scope: getIdentifier(this.parent.structDef),
+        pipelineLength: pipeline.length,
+        initialArgumentKeys: Object.keys(this.parent.arguments()),
+      };
+      try {
+        this.parent.eventStream?.emit(
+          'debug-args-pipeline-start',
+          initialPayload
+        );
+      } catch (_e) {
+        // event stream optional
+      }
+      debugLog('pipeline start', initialPayload);
+      capturedArgs = this.parent.arguments();
       let structDef: FinalizeSourceDef = {
         ...outputStruct,
         name: lastStageName,
@@ -2038,12 +2342,53 @@ export class QueryQuery extends QueryField {
         const parent = this.parent.parent
           ? {struct: this.parent.parent}
           : {model: this.parent.getModel()};
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[malloy debug] generateSQLFromPipeline creating QueryStruct',
+            {
+              structName: structDef.name,
+              structType: structDef.type,
+              capturedArgs: Object.keys(capturedArgs || {}),
+              transformType: transform.type,
+              stack: new Error().stack?.split('\n').slice(1, 4).join('\n'),
+            }
+          );
+        }
         const s = new QueryStruct(
           structDef,
-          this.parent.sourceArguments,
+          capturedArgs,
           parent,
           this.parent.prepareResultOptions
         );
+        try {
+          const stageEnterPayload = {
+            scope: getIdentifier(structDef),
+            stageType: transform.type,
+            argumentKeys: Object.keys(s.arguments()),
+            sourceArgKeys: Object.keys(capturedArgs ?? {}),
+          };
+          try {
+            this.parent.eventStream?.emit(
+              'debug-args-stage-enter',
+              stageEnterPayload
+            );
+          } catch (_e) {
+            // swallow event stream failures
+          }
+          debugLog('pipeline stage enter', stageEnterPayload);
+          if (process.env['MALLOY_DEBUG_ARGS']) {
+            // eslint-disable-next-line no-console
+            console.log('[malloy args] stage enter', {
+              scope: getIdentifier(structDef),
+              stageType: transform.type,
+              argumentKeys: Object.keys(s.arguments()),
+              sourceArgKeys: Object.keys(capturedArgs ?? {}),
+            });
+          }
+        } catch (_e) {
+          // debug instrumentation only
+        }
         const q = QueryQuery.makeQuery(
           {type: 'turtle', name: '~computeLastStage~', pipeline: [transform]},
           s,
@@ -2054,6 +2399,33 @@ export class QueryQuery extends QueryField {
         q.prepare(stageWriter);
         lastStageName = q.generateSQL(stageWriter);
         outputStruct = q.getResultStructDef();
+        capturedArgs = q.parent.arguments();
+        try {
+          const stageExitPayload = {
+            scope: getIdentifier(q.parent.structDef),
+            stageType: transform.type,
+            outputArgumentKeys: Object.keys(capturedArgs ?? {}),
+          };
+          try {
+            this.parent.eventStream?.emit(
+              'debug-args-stage-exit',
+              stageExitPayload
+            );
+          } catch (_e) {
+            // ignore event stream issues
+          }
+          debugLog('pipeline stage exit', stageExitPayload);
+          if (process.env['MALLOY_DEBUG_ARGS']) {
+            // eslint-disable-next-line no-console
+            console.log('[malloy args] stage exit', {
+              scope: getIdentifier(q.parent.structDef),
+              stageType: transform.type,
+              outputArgumentKeys: Object.keys(capturedArgs ?? {}),
+            });
+          }
+        } catch (_e) {
+          // debug instrumentation only
+        }
         structDef = {
           ...outputStruct,
           name: lastStageName,
@@ -2061,7 +2433,33 @@ export class QueryQuery extends QueryField {
         };
       }
     }
-    return {lastStageName, outputStruct};
+    const finalArgs =
+      capturedArgs !== undefined ? capturedArgs : this.parent.arguments();
+    try {
+      // Expose evaluated args to the parent QueryStruct for runtime param resolution in filters
+      (this.parent as any)._runtimeSourceArguments = finalArgs;
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[malloy debug] generateSQLFromPipeline attach runtime args',
+          {
+            parentScope: getIdentifier(this.parent.structDef),
+            finalArgumentKeys: Object.keys(finalArgs || {}),
+          }
+        );
+      }
+    } catch (_e) {
+      // ignore
+    }
+    debugLog('pipeline final', {
+      scope: getIdentifier(this.parent.structDef),
+      finalArgumentKeys: Object.keys(finalArgs ?? {}),
+    });
+    return {
+      lastStageName,
+      outputStruct,
+      sourceArguments: finalArgs,
+    };
   }
 }
 //  wildcards have been expanded

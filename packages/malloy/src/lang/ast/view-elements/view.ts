@@ -26,6 +26,7 @@ import type {QueryOperationSpace} from '../field-space/query-spaces';
 import type {FieldSpace, SourceFieldSpace} from '../types/field-space';
 import {MalloyElement} from '../types/malloy-element';
 import type {PipelineComp} from '../types/pipeline-comp';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A `View` represents a sequence of operations to be performed on a
@@ -45,18 +46,28 @@ import type {PipelineComp} from '../types/pipeline-comp';
 export abstract class View extends MalloyElement {
   abstract pipelineComp(
     fs: FieldSpace,
+    parameterSpace?: ParameterSpace,
     isNestIn?: QueryOperationSpace
   ): PipelineComp;
 
-  pipeline(fs: FieldSpace, isNestIn?: QueryOperationSpace): PipeSegment[] {
-    return this.pipelineComp(fs, isNestIn).pipeline;
+  pipeline(
+    fs: FieldSpace,
+    parameterSpace?: ParameterSpace,
+    isNestIn?: QueryOperationSpace
+  ): PipeSegment[] {
+    return this.pipelineComp(fs, parameterSpace, isNestIn).pipeline;
   }
 
   abstract refine(
     inputFS: SourceFieldSpace,
     pipeline: PipeSegment[],
+    parameterSpace: ParameterSpace | undefined,
     isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[];
 
   abstract getImplicitName(): string | undefined;
+
+  assignParameterSpace(parameterSpace: ParameterSpace | undefined): void {
+    void parameterSpace;
+  }
 }

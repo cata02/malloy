@@ -28,6 +28,7 @@ import type {
   MatrixOperation,
   SourceDef,
   AccessModifierLabel,
+  Argument,
 } from '../../../model/malloy_types';
 import {isSourceDef, isJoinable} from '../../../model/malloy_types';
 import type {DynamicSpace} from '../field-space/dynamic-space';
@@ -253,10 +254,90 @@ export class ExpressionJoin extends Join {
         // Merge parameters: outer first, then source (outer takes precedence)
         const allParams = [...outerParams, ...sourceParams];
         mergedParameterSpace = new ParameterSpace(allParams);
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] join merged parameter space', {
+            join: this.name.refString,
+            outerParameters: outerParams.map(p => p.name),
+            sourceParameters: sourceParams.map(p => p.name),
+            mergedParameters: mergedParameterSpace
+              ? mergedParameterSpace.entries().map(([name]) => name)
+              : [],
+          });
+        }
       }
     }
 
     const sourceDef = source.getSourceDef(mergedParameterSpace);
+
+    // For sources that already have arguments (NamedSource with args or QuerySource),
+    // don't merge outer arguments into sourceDef.arguments because they already have
+    // the correct argument mapping (e.g., param2 is p)
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] join checking source type', {
+        join: this.name.refString,
+        sourceType: source.constructor.name,
+        isNamedSource: source instanceof NamedSource,
+        hasArgs: source instanceof NamedSource ? !!source.args : false,
+        argsLength:
+          source instanceof NamedSource ? source.args?.length || 0 : 0,
+        sourceDefArgs: Object.keys(sourceDef.arguments || {}),
+      });
+    }
+    const hasExistingArguments =
+      (source instanceof NamedSource && source.args) ||
+      (sourceDef.arguments && Object.keys(sourceDef.arguments).length > 0);
+    if (!hasExistingArguments) {
+      // Extract outer arguments from the parameter space and merge them into the sourceDef
+      const outerArguments: Record<string, Argument> = {};
+      for (const [_name, entry] of parameterSpace.entries()) {
+        if (entry instanceof AbstractParameter) {
+          outerArguments[_name] = entry.parameter();
+        }
+      }
+
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] join extracting outer args', {
+          join: this.name.refString,
+          outerArgs: Object.keys(outerArguments),
+          sourceDefArgsBefore: Object.keys(sourceDef.arguments || {}),
+        });
+      }
+
+      // Merge outer arguments into the sourceDef's arguments
+      sourceDef.arguments = {...sourceDef.arguments, ...outerArguments};
+    } else {
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[malloy debug] join skipping outer args merge for source with existing args',
+          {
+            join: this.name.refString,
+            sourceDefArgs: Object.keys(sourceDef.arguments || {}),
+          }
+        );
+      }
+    }
+
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] join merged args', {
+        join: this.name.refString,
+        sourceDefArgsAfter: Object.keys(sourceDef.arguments || {}),
+      });
+    }
+
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] join struct def', {
+        join: this.name.refString,
+        sourceType: sourceDef.type,
+        parameters: Object.keys(sourceDef.parameters ?? {}),
+        arguments: Object.keys(sourceDef.arguments ?? {}),
+      });
+    }
     let matrixOperation: MatrixOperation = 'left';
     if (this.inExperiment('join_types', true)) {
       matrixOperation = this.matrixOperation;
@@ -273,6 +354,15 @@ export class ExpressionJoin extends Join {
       location: this.location,
     };
     delete joinStruct.as;
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] join field constructed', {
+        join: joinStruct.name,
+        joinType: joinStruct.join,
+        parameters: Object.keys(joinStruct.parameters ?? {}),
+        arguments: Object.keys(joinStruct.arguments ?? {}),
+      });
+    }
     if (this.note) {
       joinStruct.annotation = this.note;
     }

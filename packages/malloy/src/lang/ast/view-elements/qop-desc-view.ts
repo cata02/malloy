@@ -30,6 +30,7 @@ import type {SourceFieldSpace} from '../types/field-space';
 import type {PipelineComp} from '../types/pipeline-comp';
 import {LegalRefinementStage} from '../types/query-property-interface';
 import {View} from './view';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A view operation consisting of literal view operations.
@@ -44,6 +45,7 @@ export class QOpDescView extends View {
 
   pipelineComp(
     fs: SourceFieldSpace,
+    parameterSpace?: ParameterSpace,
     isNestIn?: QueryOperationSpace
   ): PipelineComp {
     const newOperation = this.operation.getOp(fs, isNestIn);
@@ -55,6 +57,7 @@ export class QOpDescView extends View {
 
   private getOp(
     inputFS: SourceFieldSpace,
+    parameterSpace: ParameterSpace | undefined,
     isNestIn: QueryOperationSpace | undefined,
     qOpDesc: QOpDesc,
     refineThis: PipeSegment
@@ -64,12 +67,14 @@ export class QOpDescView extends View {
       return refineThis;
     }
     qOpDesc.refineFrom(refineThis);
-    return qOpDesc.getOp(inputFS, isNestIn).segment;
+    const {segment} = qOpDesc.getOp(inputFS, isNestIn);
+    return segment;
   }
 
   refine(
     inputFS: SourceFieldSpace,
     _pipeline: PipeSegment[],
+    parameterSpace: ParameterSpace | undefined,
     isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[] {
     const pipeline = [..._pipeline];
@@ -78,7 +83,15 @@ export class QOpDescView extends View {
     }
     if (pipeline.length === 1) {
       this.operation.refineFrom(pipeline[0]);
-      return [this.getOp(inputFS, isNestIn, this.operation, pipeline[0])];
+      return [
+        this.getOp(
+          inputFS,
+          parameterSpace,
+          isNestIn,
+          this.operation,
+          pipeline[0]
+        ),
+      ];
     }
     const headRefinements = new QOpDesc([]);
     const tailRefinements = new QOpDesc([]);
@@ -107,7 +120,8 @@ export class QOpDescView extends View {
       this.has({headRefinements});
       pipeline[0] = this.getOp(
         inputFS,
-        undefined,
+        parameterSpace,
+        isNestIn,
         headRefinements,
         pipeline[0]
       );
@@ -122,12 +136,14 @@ export class QOpDescView extends View {
         pipeline.length > 1
           ? new StaticSourceSpace(
               pipeline[pipeline.length - 2].outputStruct,
-              'public'
+              'public',
+              parameterSpace
             )
           : inputFS;
       pipeline[pipeline.length - 1] = this.getOp(
         finalIn,
-        undefined,
+        parameterSpace,
+        isNestIn,
         tailRefinements,
         pipeline[last]
       );

@@ -41,6 +41,9 @@ import type {PipelineComp} from '../types/pipeline-comp';
 import {SpaceField} from '../types/space-field';
 import {refine} from './refine-utils';
 import {View} from './view';
+import type {ParameterSpace} from '../field-space/parameter-space';
+import {assignParameterSpace} from '../query-elements/parameter-space';
+import type {QueryElement} from '../types/query-element';
 
 /**
  * A view operation that is just a reference to another view or a
@@ -52,6 +55,7 @@ import {View} from './view';
  */
 export class ReferenceView extends View {
   elementType = 'reference-view';
+  private parameterSpace?: ParameterSpace;
   constructor(readonly reference: ViewOrScalarFieldReference) {
     super({reference});
   }
@@ -61,8 +65,10 @@ export class ReferenceView extends View {
   // used for checking `exclude` references.
   pipelineComp(
     fs: SourceFieldSpace,
+    parameterSpace: ParameterSpace | undefined,
     _isNestIn: QueryOperationSpace
   ): PipelineComp {
+    this.parameterSpace = parameterSpace ?? this.parameterSpace;
     return this._pipelineComp(fs);
   }
 
@@ -141,8 +147,17 @@ export class ReferenceView extends View {
         ];
       }
       pipeline = attachDrillPaths(pipeline, fieldDef.name);
+      const applied = pipeline.map(segment => ({...segment}));
+      for (const seg of applied) {
+        if ('parameterSpace' in seg && this.parameterSpace) {
+          assignParameterSpace(
+            seg as unknown as QueryElement,
+            this.parameterSpace
+          );
+        }
+      }
       return {
-        pipeline,
+        pipeline: applied,
         name: fieldDef.name,
         annotation: fieldDef.annotation,
         outputStruct: pipeline[pipeline.length - 1].outputStruct,
@@ -192,8 +207,10 @@ export class ReferenceView extends View {
   refine(
     inputFS: SourceFieldSpace,
     pipeline: PipeSegment[],
+    parameterSpace: ParameterSpace | undefined,
     _isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[] {
+    this.parameterSpace = parameterSpace ?? this.parameterSpace;
     const refineFrom = this.getRefinement(inputFS);
     if (refineFrom) {
       return refine(this, pipeline, refineFrom);
@@ -204,5 +221,9 @@ export class ReferenceView extends View {
 
   getImplicitName(): string | undefined {
     return this.reference.nameString;
+  }
+
+  assignParameterSpace(parameterSpace: ParameterSpace | undefined): void {
+    this.parameterSpace = parameterSpace;
   }
 }

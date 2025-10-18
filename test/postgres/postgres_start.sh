@@ -18,8 +18,8 @@ if [ -z "$PGHOST" ] || [ "$PGHOST" != "localhost" ]; then
   EXPORTS="${EXPORTS}export PGHOST=localhost\n"
 fi
 
-if [ -z "$PGPORT" ] || [ "$PGPORT" != "5432" ]; then
-  EXPORTS="${EXPORTS}export PGPORT=5432\n"
+if [ -z "$PGPORT" ] || [ "$PGPORT" != "5433" ]; then
+  EXPORTS="${EXPORTS}export PGPORT=5433\n"
 fi
 
 if [ -z "$PGUSER" ] || [ "$PGUSER" != "root" ]; then
@@ -38,8 +38,8 @@ if [ -n "$EXPORTS" ]; then
   exit 1
 fi
 
-docker run -p 5432:5432 -d -v $DATADIR:/init_data \
- --name postgres-malloy \
+docker run -p 5433:5432 -d -v $DATADIR:/init_data \
+ --name malloy-test-postgres \
   -e POSTGRES_USER=root -e POSTGRES_PASSWORD=postgres \
   -e TZ=UTC \
   --health-cmd pg_isready \
@@ -48,7 +48,7 @@ docker run -p 5432:5432 -d -v $DATADIR:/init_data \
   --health-retries 5 \
   -d postgres
 
-CONTAINER_NAME="postgres-malloy"
+CONTAINER_NAME="malloy-test-postgres"
 
 echo "Waiting for container $CONTAINER_NAME to become healthy..."
 

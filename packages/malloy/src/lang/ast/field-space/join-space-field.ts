@@ -23,7 +23,7 @@
 
 import type {Join} from '../source-properties/join';
 import type {ParameterSpace} from './parameter-space';
-import {StructSpaceField} from './static-space';
+import {StaticSourceSpace, StructSpaceField} from './static-space';
 
 export class JoinSpaceField extends StructSpaceField {
   constructor(
@@ -33,5 +33,17 @@ export class JoinSpaceField extends StructSpaceField {
     forConnection: string
   ) {
     super(join.getStructDef(parameterSpace), forDialect, forConnection);
+  }
+
+  get fieldSpace() {
+    const base = super.fieldSpace;
+    if (base instanceof StaticSourceSpace) {
+      return new StaticSourceSpace(
+        base.structDef(),
+        base.accessProtectionLevel(),
+        this.parameterSpace
+      );
+    }
+    return base;
   }
 }

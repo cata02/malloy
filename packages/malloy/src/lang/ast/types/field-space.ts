@@ -31,6 +31,7 @@ import type {QueryOperationSpace} from '../field-space/query-spaces';
 import type {LookupResult} from './lookup-result';
 import {MalloyElement} from './malloy-element';
 import type {SpaceEntry} from './space-entry';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A FieldSpace is a hierarchy of namespaces, where the leaf nodes
@@ -51,6 +52,7 @@ export interface FieldSpace {
   connectionName(): string;
   isQueryFieldSpace(): this is QueryFieldSpace;
   accessProtectionLevel(): AccessModifierLabel;
+  parameterSpace?(): ParameterSpace;
 }
 
 export interface SourceFieldSpace extends FieldSpace {

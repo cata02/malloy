@@ -4,4 +4,4 @@
 rm -rf .tmp
 
 # stop container
-docker rm -f postgres-malloy
+docker rm -f malloy-test-postgres

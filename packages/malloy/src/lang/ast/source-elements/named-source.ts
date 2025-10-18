@@ -162,6 +162,16 @@ export class NamedSource extends Source {
     parametersIn: Record<string, Parameter> | undefined,
     parametersOut: HasParameter[] | undefined
   ): Record<string, Parameter> {
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] NamedSource.evaluateArguments', {
+        ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+        sourceArguments: Object.keys(this.sourceArguments || {}),
+        argsLength: this.args?.length || 0,
+        parametersIn: Object.keys(parametersIn || {}),
+        parameterSpaceKeys: parameterSpace?.parameterNames() || [],
+      });
+    }
     const outArguments = {...this.sourceArguments};
     const passedNames = new Set();
     for (const argument of this.args ?? []) {
@@ -170,6 +180,15 @@ export class NamedSource extends Source {
         (argument.value instanceof ExprIdReference
           ? argument.value.fieldReference
           : undefined);
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] NamedSource processing argument', {
+          ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+          hasId: !!id,
+          idOutputName: id?.outputName,
+          argumentValue: argument.value?.constructor.name,
+        });
+      }
       if (id === undefined) {
         argument.value.logError(
           'unnamed-source-argument',
@@ -197,6 +216,56 @@ export class NamedSource extends Source {
           parameterSpace ?? new ParameterSpace(parametersOut ?? []);
         const pVal = argument.value.getExpression(paramSpace);
         let value = pVal.value;
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] NamedSource pVal from getExpression', {
+            ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+            paramName: name,
+            pValValueNode: pVal.value?.node,
+            pValValue: pVal.value,
+            pValType: pVal.type,
+          });
+        }
+
+        // If the value is still a parameter reference, try to resolve it recursively
+        // This handles cases like: outer(p is 'CA') -> { join: inner(param is p) }
+        // where 'param is p' resolves to a parameter node that needs further resolution
+        let resolveAttempts = 0;
+        const maxResolveAttempts = 10; // Prevent infinite loops
+        while (
+          value?.node === 'parameter' &&
+          resolveAttempts < maxResolveAttempts
+        ) {
+          const paramRef = value.path[0];
+          const resolved = paramSpace.entry(paramRef);
+          if (resolved && resolved.refType === 'parameter') {
+            const resolvedParam = (resolved as any).parameter();
+            if (resolvedParam.value) {
+              if (process.env['MALLOY_DEBUG_ARGS']) {
+                // eslint-disable-next-line no-console
+                console.log(
+                  '[malloy debug] NamedSource resolving param chain',
+                  {
+                    ref:
+                      typeof this.ref === 'string'
+                        ? this.ref
+                        : this.ref.refString,
+                    from: paramRef,
+                    toNode: resolvedParam.value?.node,
+                    attempt: resolveAttempts + 1,
+                  }
+                );
+              }
+              value = resolvedParam.value;
+              resolveAttempts++;
+            } else {
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+
         if (
           pVal.type === 'filter expression' &&
           parameter.type === 'filter expression' &&
@@ -221,7 +290,23 @@ export class NamedSource extends Source {
           ...parameter,
           value,
         };
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] NamedSource set outArgument', {
+            ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+            paramName: name,
+            valueType: typeof value,
+            valueNode: value?.node,
+          });
+        }
       }
+    }
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] NamedSource final outArguments', {
+        ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+        outArguments: Object.keys(outArguments),
+      });
     }
 
     for (const paramName in parametersIn) {
@@ -239,6 +324,16 @@ export class NamedSource extends Source {
   }
 
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] named-source getSourceDef', {
+        ref: typeof this.ref === 'string' ? this.ref : this.ref.refString,
+        hasParameterSpace: !!parameterSpace,
+        parameterNames: parameterSpace?.parameterNames() || [],
+        sourceArguments: Object.keys(this.sourceArguments || {}),
+        args: Object.keys(this.args || {}),
+      });
+    }
     return this.withParameters(parameterSpace, []);
   }
 

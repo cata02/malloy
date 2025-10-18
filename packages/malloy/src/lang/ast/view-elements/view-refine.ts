@@ -21,13 +21,15 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import type {PipeSegment} from '../../../model';
+import type {PipeSegment} from '../../../model/malloy_types';
 import {ErrorFactory} from '../error-factory';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
-import type {SourceFieldSpace} from '../types/field-space';
+import type {SourceFieldSpace, FieldSpace} from '../types/field-space';
 import type {PipelineComp} from '../types/pipeline-comp';
 import {refine} from './refine-utils';
 import {View} from './view';
+import type {ParameterSpace} from '../field-space/parameter-space';
+import {StaticSourceSpace} from '../field-space/static-space';
 
 /**
  * A view operation that represents the refinement of one view
@@ -46,11 +48,20 @@ export class ViewRefine extends View {
   }
 
   pipelineComp(
-    fs: SourceFieldSpace,
+    fs: FieldSpace,
+    parameterSpace?: ParameterSpace,
     isNestIn?: QueryOperationSpace
   ): PipelineComp {
-    const query = this.base.pipelineComp(fs);
-    const resultPipe = this.refinement.refine(fs, query.pipeline, isNestIn);
+    const query = this.base.pipelineComp(fs, parameterSpace, isNestIn);
+    const inputSpace = query.outputStruct;
+    const refineSpace = new StaticSourceSpace(
+      inputSpace,
+      'public',
+      parameterSpace
+    );
+    const {pipeline: refinePipeline, outputStruct} =
+      this.refinement.pipelineComp(refineSpace, parameterSpace, isNestIn);
+    const resultPipe = [...query.pipeline, ...refinePipeline];
     return {
       pipeline: resultPipe,
       annotation: query.annotation,
@@ -64,18 +75,29 @@ export class ViewRefine extends View {
   refine(
     inputFS: SourceFieldSpace,
     pipeline: PipeSegment[],
+    parameterSpace: ParameterSpace | undefined,
     isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[] {
-    const refineFrom = this.pipelineComp(inputFS, isNestIn);
-    if (refineFrom.pipeline.length !== 1) {
-      this.refinement.logError(
-        'refinement-with-multistage-view',
-        'refinement must have exactly one stage'
-      );
-      // TODO better error pipeline?
-      return pipeline;
+    const basePipeline = this.base.pipelineComp(
+      inputFS,
+      parameterSpace,
+      isNestIn
+    ).pipeline;
+    const combinedPipeline = [...basePipeline, ...pipeline];
+    if (combinedPipeline.length === 0) {
+      return combinedPipeline;
     }
-    return refine(this, pipeline, refineFrom.pipeline[0]);
+    const refineFS = new StaticSourceSpace(
+      combinedPipeline[combinedPipeline.length - 1].outputStruct,
+      'public',
+      parameterSpace
+    );
+    return this.refinement.refine(
+      refineFS,
+      combinedPipeline,
+      parameterSpace,
+      isNestIn
+    );
   }
 
   getImplicitName(): string | undefined {

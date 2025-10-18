@@ -6,6 +6,7 @@
 /* Shared helpers for assigning parameter spaces to query elements. */
 
 import type {ParameterSpace} from '../field-space/parameter-space';
+import type {Argument} from '../../../model/malloy_types';
 import type {QueryElement} from '../types/query-element';
 
 // Narrow to any object that exposes an optional parameterSpace for assignment
@@ -29,3 +30,5 @@ export function assignParameterSpace(
     (query as ParameterAssignable).parameterSpace = parameterSpace;
   }
 }
+
+// assignSourceArguments helper intentionally removed to avoid forcing sourceArguments onto query elements.

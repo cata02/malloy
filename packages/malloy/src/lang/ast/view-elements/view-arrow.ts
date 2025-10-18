@@ -32,6 +32,7 @@ import {
   requiresNewStage,
   segmentTypeFromPipeSegment,
 } from '../query-elements/query-class-policy';
+import type {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * A view operation which represents adding a segment (or multiple
@@ -60,9 +61,13 @@ export class ViewArrow extends View {
     return false;
   }
 
-  pipelineComp(fs: FieldSpace): PipelineComp {
-    const baseComp = this.base.pipelineComp(fs);
-    const nextFS = new StaticSourceSpace(baseComp.outputStruct, 'public');
+  pipelineComp(fs: FieldSpace, parameterSpace?: ParameterSpace): PipelineComp {
+    const baseComp = this.base.pipelineComp(fs, parameterSpace);
+    const nextFS = new StaticSourceSpace(
+      baseComp.outputStruct,
+      'public',
+      parameterSpace
+    );
 
     // Check if the operation is a QOpDescView that needs refinement
     if (this.operation instanceof QOpDescView) {
@@ -78,7 +83,7 @@ export class ViewArrow extends View {
       }
     }
 
-    const finalComp = this.operation.pipelineComp(nextFS);
+    const finalComp = this.operation.pipelineComp(nextFS, parameterSpace);
     return {
       pipeline: [...baseComp.pipeline, ...finalComp.pipeline],
       outputStruct: finalComp.outputStruct,
@@ -88,6 +93,7 @@ export class ViewArrow extends View {
   refine(
     _inputFS: SourceFieldSpace,
     _pipeline: PipeSegment[],
+    _parameterSpace: ParameterSpace | undefined,
     _isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[] {
     this.logError(

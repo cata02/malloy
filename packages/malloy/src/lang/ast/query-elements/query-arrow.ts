@@ -21,7 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import type {Query, StructDef} from '../../../model/malloy_types';
+import type {Query, StructDef, Argument} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import {Source} from '../source-elements/source';
 import {StaticSourceSpace} from '../field-space/static-space';
@@ -32,6 +32,8 @@ import {QueryBase} from './query-base';
 import type {View} from '../view-elements/view';
 import {checkRequiredGroupBys} from '../../composite-source-utils';
 import type {ParameterSpace} from '../field-space/parameter-space';
+import {assignParameterSpace} from './parameter-space';
+import {debugLog} from '../../../util/debug_log';
 
 /**
  * A query operation that adds segments to a LHS source or query.
@@ -53,9 +55,20 @@ export class QueryArrow extends QueryBase implements QueryElement {
     let inputStruct: StructDef;
     let queryBase: Query;
     let fieldSpace: FieldSpace;
+    this.view.assignParameterSpace(this.parameterSpace);
     if (this.source instanceof Source) {
       // We create a fresh query with either the QOPDesc as the head,
       // the view as the head, or the scalar as the head (if scalar lenses is enabled)
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] query-arrow source type', {
+          sourceType: this.source.constructor.name,
+          isRefOk,
+          hasParameterSpace: !!this.parameterSpace,
+          parameterNames: this.parameterSpace?.parameterNames() || [],
+        });
+      }
+
       const invoked = isRefOk
         ? this.source.structRef(this.parameterSpace)
         : {structRef: this.source.getSourceDef(this.parameterSpace)};
@@ -65,16 +78,50 @@ export class QueryArrow extends QueryBase implements QueryElement {
         pipeline: [],
         location: this.location,
       };
-      inputStruct = refIsStructDef(invoked.structRef)
+      const structDef = refIsStructDef(invoked.structRef)
         ? invoked.structRef
         : this.source.getSourceDef(this.parameterSpace);
-      fieldSpace = new StaticSourceSpace(inputStruct, 'public');
+      inputStruct = {
+        ...structDef,
+        parameters: structDef.parameters,
+        annotation: structDef.annotation,
+      };
+      fieldSpace = new StaticSourceSpace(
+        inputStruct,
+        'public',
+        this.parameterSpace
+      );
+      debugLog('query-arrow source entry', {
+        element: this.view.elementType,
+        source: inputStruct.name ?? inputStruct.type,
+        parameterKeys: Object.keys(inputStruct.parameters ?? {}),
+        parameterSpaceKeys: this.parameterSpace
+          ? this.parameterSpace.parameterNames()
+          : [],
+      });
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment
+      // Ensure any in-scope parameters are available to the LHS query element
+      assignParameterSpace(this.source as QueryElement, this.parameterSpace);
       const lhsQuery = this.source.queryComp(isRefOk);
       queryBase = lhsQuery.query;
-      inputStruct = lhsQuery.outputStruct;
-      fieldSpace = new StaticSourceSpace(lhsQuery.outputStruct, 'public');
+      inputStruct = {
+        ...lhsQuery.outputStruct,
+        annotation: lhsQuery.outputStruct.annotation,
+        parameters: lhsQuery.outputStruct.parameters,
+      };
+      fieldSpace = new StaticSourceSpace(
+        lhsQuery.outputStruct,
+        'public',
+        this.parameterSpace
+      );
+      debugLog('query-arrow lhs entry', {
+        source: lhsQuery.outputStruct.name ?? lhsQuery.outputStruct.type,
+        parameterKeys: Object.keys(lhsQuery.outputStruct.parameters ?? {}),
+        parameterSpaceKeys: this.parameterSpace
+          ? this.parameterSpace.parameterNames()
+          : [],
+      });
     }
     const {
       pipeline: rhsPipeline,
@@ -126,14 +173,67 @@ export class QueryArrow extends QueryBase implements QueryElement {
       ),
     ];
 
-    return {
+    // Build sourceArguments for query_source:
+    // - Start with any arguments provided at the query head (e.g., NamedSource.structRef -> evaluateArgumentsForRef)
+    // - Prefer evaluated mappings from the inputStruct if present
+    // - Fill missing keys from parameter definitions on the outputStruct that already have concrete values
+    const sourceArguments: Record<string, Argument> = {
+      ...((queryBase as any).sourceArguments || {}),
+    };
+    const inputArgs = (inputStruct as any).arguments as
+      | Record<string, Argument>
+      | undefined;
+    if (inputArgs) {
+      for (const [k, v] of Object.entries(inputArgs)) {
+        if (sourceArguments[k] === undefined) {
+          sourceArguments[k] = v;
+        }
+      }
+    }
+    if (outputStruct.parameters) {
+      for (const [paramName, paramDef] of Object.entries(
+        outputStruct.parameters
+      )) {
+        if (
+          sourceArguments[paramName] === undefined &&
+          paramDef.value !== undefined
+        ) {
+          sourceArguments[paramName] = paramDef;
+        }
+      }
+    }
+
+    const comp = {
       query: {
         ...query,
         compositeResolvedSourceDef,
         pipeline: pipelineWithExpandedFieldUsage,
+        sourceArguments,
       },
       outputStruct,
       inputStruct,
     };
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] QueryArrow.queryComp final comp', {
+        querySourceArguments: Object.keys(comp.query.sourceArguments || {}),
+        outputStructParameters: Object.keys(comp.outputStruct.parameters || {}),
+        queryHasSourceArguments: 'sourceArguments' in comp.query,
+        querySourceArgumentsValues: comp.query.sourceArguments,
+        querySourceArgumentsNodes: Object.fromEntries(
+          Object.entries(comp.query.sourceArguments || {}).map(
+            ([k, v]: any) => [
+              k,
+              v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
+            ]
+          )
+        ),
+      });
+    }
+    debugLog('query-arrow return', {
+      outputSource: outputStruct.name ?? outputStruct.type,
+      outputParameterKeys: Object.keys(outputStruct.parameters ?? {}),
+    });
+    return comp;
   }
 }

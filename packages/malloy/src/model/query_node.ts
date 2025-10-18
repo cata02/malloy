@@ -27,6 +27,7 @@ import type {
   SourceDef,
   Query,
 } from './malloy_types';
+import {debugLog} from '../util/debug_log';
 import {
   isSourceDef,
   getIdentifier,
@@ -159,9 +160,21 @@ export class QueryFieldStruct extends QueryField {
   ) {
     super(jfd, parent, referenceId);
     this.fieldDef = jfd;
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] QueryFieldStruct constructor', {
+        fieldName: jfd.name,
+        fieldType: jfd.type,
+        sourceArguments: Object.keys(sourceArguments || {}),
+        parentSourceArguments: Object.keys(parent.sourceArguments || {}),
+        finalArgs: Object.keys(
+          (sourceArguments ?? parent.sourceArguments) || {}
+        ),
+      });
+    }
     this.queryStruct = new QueryStruct(
       jfd,
-      sourceArguments,
+      sourceArguments ?? parent.sourceArguments,
       {struct: parent},
       prepareResultOptions
     );
@@ -285,6 +298,7 @@ export class QueryStruct {
    */
   computeRecordExpression?: () => string;
   recordValue?: string;
+  // Removed runtime arg bag; rely on arguments() only
 
   constructor(
     public structDef: StructDef,
@@ -292,6 +306,16 @@ export class QueryStruct {
     parent: ParentQueryStruct | ParentQueryModel,
     readonly prepareResultOptions: PrepareResultOptions
   ) {
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] QueryStruct constructor', {
+        structName: structDef.name,
+        structType: structDef.type,
+        sourceArguments: Object.keys(sourceArguments || {}),
+        hasParent: 'struct' in parent,
+        stack: new Error().stack?.split('\n').slice(1, 4).join('\n'),
+      });
+    }
     this.setParent(parent);
 
     if ('model' in parent) {
@@ -367,6 +391,34 @@ export class QueryStruct {
                 const resolved1 = (
                   this.parent ? this.parent.arguments() : this.arguments()
                 )[frag.path[0]];
+                if (process.env['MALLOY_DEBUG_ARGS']) {
+                  // eslint-disable-next-line no-console
+                  console.log(
+                    '[malloy debug] resolveParentParameterReferences',
+                    {
+                      paramName: frag.path[0],
+                      hasParent: !!this.parent,
+                      scope: getIdentifier(this.structDef),
+                      hasResolved1: !!resolved1,
+                      currentArgs: Object.keys(this.arguments()),
+                      parentArgs: this.parent
+                        ? Object.keys(this.parent.arguments())
+                        : [],
+                    }
+                  );
+                }
+                if (!resolved1) {
+                  this.eventStream?.emit('parameter-miss', {
+                    scope: getIdentifier(this.structDef),
+                    name: frag.path[0],
+                    available: Object.keys(
+                      this.parent ? this.parent.arguments() : this.arguments()
+                    ),
+                  });
+                  throw new Error(
+                    `Parameter '${frag.path[0]}' not found in current scope`
+                  );
+                }
                 const resolved2 = this.parent
                   ? this.parent.resolveParentParameterReferences(resolved1)
                   : resolved1;
@@ -387,19 +439,270 @@ export class QueryStruct {
       return this._arguments;
     }
     this._arguments = {};
+    const scopeIdentifier = getIdentifier(this.structDef);
     if (isSourceDef(this.structDef)) {
-      // First, copy over all parameters, to get default values
+      // Build a concrete argument map: literals stay literals; parameter-node inputs resolve via parent
       const params = this.structDef.parameters ?? {};
-      for (const parameterName in params) {
-        this._arguments[parameterName] = params[parameterName];
+      const declaredArgs = this.structDef.arguments ?? {};
+      const incoming = {...declaredArgs, ...(this.sourceArguments ?? {})};
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        try {
+          // Log raw incoming nodes to verify literal vs parameter refs
+          const rawNodes: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(incoming)) {
+            const vv: any = (v as any)?.value;
+            rawNodes[k] = vv?.node ?? (vv === null ? null : typeof vv);
+          }
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] arguments incoming(raw)', {
+            scope: scopeIdentifier,
+            nodes: rawNodes,
+          });
+        } catch (_e) {
+          // ignore
+        }
       }
-      // Then, copy over arguments to override default values
-      const args = {...this.structDef.arguments, ...this.sourceArguments};
-      for (const parameterName in args) {
-        const orig = args[parameterName];
-        this._arguments[parameterName] =
-          this.resolveParentParameterReferences(orig);
+
+      // Seed defaults
+      for (const [name, param] of Object.entries(params)) {
+        this._arguments[name] = param;
       }
+
+      // Apply overrides from declared/incoming arguments with resolution of parameter references
+      const resolveFromParents = (refName: string): Argument | undefined => {
+        let cur: QueryStruct | undefined = this.parent;
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] resolveFromParents start', {
+            scope: scopeIdentifier,
+            refName,
+            hasParent: !!this.parent,
+          });
+        }
+        while (cur) {
+          const a = cur.arguments?.();
+          const found = a?.[refName];
+          if (process.env['MALLOY_DEBUG_ARGS']) {
+            // eslint-disable-next-line no-console
+            console.log('[malloy debug] resolveFromParents checking', {
+              curScope: getIdentifier(cur.structDef),
+              hasFound: !!found,
+              foundValueNode: found?.value?.node,
+            });
+          }
+          if (found && found.value !== null && found.value !== undefined) {
+            return found;
+          }
+          cur = cur.parent;
+        }
+        return undefined;
+      };
+
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        try {
+          const ak = Object.keys(incoming);
+          const av: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(incoming)) {
+            const vv: any = (v as any)?.value;
+            av[k] = vv?.node ?? (vv === null ? null : typeof vv);
+          }
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] arguments incoming', {
+            scope: scopeIdentifier,
+            keys: ak,
+            nodes: av,
+          });
+        } catch (_e) {
+          // ignore
+        }
+      }
+
+      for (const [name, arg] of Object.entries(incoming)) {
+        const v: any = (arg as any)?.value;
+        if (v && v.node === 'parameter') {
+          if (process.env['MALLOY_DEBUG_ARGS']) {
+            try {
+              const refNameDbg =
+                Array.isArray(v.path) && v.path.length > 0
+                  ? v.path[0]
+                  : undefined;
+              const chain: any[] = [];
+              let cur: QueryStruct | undefined = this.parent;
+              while (cur) {
+                try {
+                  const argsDbg: Record<string, any> = cur.arguments();
+                  const foundDbg: any = argsDbg?.[refNameDbg as string];
+                  const vvDbg: any = (foundDbg as any)?.value;
+                  chain.push({
+                    scope: getIdentifier(cur.structDef),
+                    has: !!foundDbg,
+                    node: vvDbg?.node ?? (vvDbg === null ? null : typeof vvDbg),
+                  });
+                } catch (_e) {
+                  chain.push({
+                    scope: getIdentifier(cur.structDef),
+                    error: true,
+                  });
+                }
+                cur = cur.parent;
+              }
+              // eslint-disable-next-line no-console
+              console.log('[malloy debug] arguments resolve param', {
+                scope: scopeIdentifier,
+                argName: name,
+                refName: refNameDbg,
+                parentChain: chain,
+              });
+            } catch (_e) {
+              // ignore
+            }
+          }
+          const refName =
+            Array.isArray(v.path) && v.path.length > 0 ? v.path[0] : undefined;
+          if (!refName) {
+            throw new Error('Invalid parameter reference');
+          }
+          const resolved = resolveFromParents(refName);
+          if (!resolved) {
+            throw new Error(
+              `Parameter '${refName}' not found in current scope`
+            );
+          }
+          this._arguments[name] = {
+            ...(arg as any),
+            value: resolved.value,
+          } as Argument;
+        } else if (v !== null && v !== undefined) {
+          this._arguments[name] = arg as Argument;
+        } else {
+          // If null here, try parent fallback for same name
+          const parentVal = this.parent?.arguments()?.[name];
+          if (
+            parentVal &&
+            parentVal.value !== null &&
+            parentVal.value !== undefined
+          ) {
+            this._arguments[name] = parentVal;
+          } else {
+            this._arguments[name] = arg as Argument;
+          }
+        }
+      }
+
+      // Ensure provided sourceArguments take precedence when they have concrete values
+      if (this.sourceArguments) {
+        for (const [k, v] of Object.entries(this.sourceArguments)) {
+          const vv: any = (v as any)?.value;
+          if (vv !== null && vv !== undefined) {
+            this._arguments[k] = v as Argument;
+          }
+        }
+      }
+
+      // Final parent merge for any missing keys
+      if (this.parent) {
+        const parentArgs = this.parent.arguments();
+        for (const [name, value] of Object.entries(parentArgs)) {
+          if (this._arguments[name] === undefined) {
+            this._arguments[name] = value;
+          }
+        }
+      }
+      debugLog('query-struct source-args', {
+        scope: scopeIdentifier,
+        structType: this.structDef.type,
+        parameterKeys: Object.keys(params),
+        argumentKeys: Object.keys(this.structDef.arguments ?? {}),
+        sourceArgumentKeys: Object.keys(this.sourceArguments ?? {}),
+        resolvedKeys: Object.keys(this._arguments),
+      });
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        const valueSummary: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(this._arguments)) {
+          // best-effort summarize
+          const vv: any = (v as any)?.value;
+          valueSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
+        }
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] arguments values', {
+          scope: scopeIdentifier,
+          values: valueSummary,
+        });
+        try {
+          const sa: any = this.sourceArguments || {};
+          const saSummary: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(sa)) {
+            const vv: any = (v as any)?.value;
+            saSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
+          }
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] sourceArguments values', {
+            scope: scopeIdentifier,
+            values: saSummary,
+          });
+        } catch (_e) {
+          // ignore
+        }
+      }
+    } else {
+      // Non-source structs (e.g., finalize/nest_source/query_result) should inherit
+      // fully-resolved arguments from their parent or use any pre-seeded arguments
+      // (e.g., for nested pipelines) provided at construction.
+      if (
+        this.sourceArguments &&
+        Object.keys(this.sourceArguments).length > 0
+      ) {
+        this._arguments = {...this.sourceArguments};
+        debugLog('query-struct non-source provided', {
+          scope: scopeIdentifier,
+          providedKeys: Object.keys(this.sourceArguments),
+        });
+      } else if (this.parent) {
+        this._arguments = {...this.parent.arguments()};
+        debugLog('query-struct non-source inherited', {
+          scope: scopeIdentifier,
+          parentKeys: Object.keys(this._arguments),
+        });
+      } else {
+        debugLog('query-struct non-source empty', {scope: scopeIdentifier});
+      }
+    }
+
+    try {
+      const scope = getIdentifier(this.structDef);
+      const resolvedKeys = Object.keys(this._arguments);
+      const sourceArgKeys = Object.keys(this.sourceArguments ?? {});
+      const parentKeys = this.parent
+        ? Object.keys(this.parent.arguments())
+        : undefined;
+      const payload = {
+        scope,
+        structType: this.structDef.type,
+        resolvedKeys,
+        sourceArgKeys,
+        parentKeys,
+        inheritedFromParent:
+          !isSourceDef(this.structDef) && sourceArgKeys.length === 0,
+      } satisfies Record<string, unknown>;
+      this.eventStream?.emit('debug-args-node', payload);
+      debugLog('query-struct arguments', payload);
+      if (process.env['MALLOY_DEBUG_ARGS']) {
+        const detailed: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(this._arguments)) {
+          const vv: any = (v as any)?.value;
+          detailed[k] = {
+            node: vv?.node ?? (vv === null ? null : typeof vv),
+            value: vv,
+          };
+        }
+        // eslint-disable-next-line no-console
+        console.log('[malloy debug] arguments detailed', {
+          scope,
+          values: detailed,
+        });
+      }
+    } catch (_e) {
+      // debug instrumentation only
     }
     return this._arguments;
   }
@@ -639,6 +942,16 @@ export class QueryStruct {
     } else {
       this.model = this.getModel();
     }
+    if (process.env['MALLOY_DEBUG_ARGS']) {
+      // eslint-disable-next-line no-console
+      console.log('[malloy debug] setParent', {
+        self: this.structDef.name ?? this.structDef.type,
+        hasParent: !!this.parent,
+        parentName:
+          this.parent?.structDef?.name ?? this.parent?.structDef?.type,
+        parentArgKeys: this.parent ? Object.keys(this.parent.arguments()) : [],
+      });
+    }
   }
 
   /** makes a new queryable field object from a fieldDef */
@@ -650,9 +963,18 @@ export class QueryStruct {
       case 'table':
       case 'sql_select':
       case 'composite':
+        if (process.env['MALLOY_DEBUG_ARGS']) {
+          // eslint-disable-next-line no-console
+          console.log('[malloy debug] makeQueryField', {
+            fieldName: field.name,
+            fieldType: field.type,
+            currentArgs: Object.keys(this.arguments()),
+            isJoined: 'join' in field,
+          });
+        }
         return new QueryFieldStruct(
           field,
-          undefined,
+          this.arguments(),
           this,
           this.prepareResultOptions
         );
