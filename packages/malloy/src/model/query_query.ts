@@ -91,7 +91,6 @@ import {shouldMaterialize} from './materialization/utils';
 import type {Argument} from './malloy_types';
 import {QueryModelImpl} from './query_model_impl';
 import type {QueryResults} from './query_model_contract';
-import {debugLog} from '../util/debug_log';
 
 function pathToCol(path: string[]): string {
   return path.map(el => encodeURIComponent(el)).join('/');
@@ -2330,7 +2329,6 @@ export class QueryQuery extends QueryField {
       } catch (_e) {
         // event stream optional
       }
-      debugLog('pipeline start', initialPayload);
       capturedArgs = this.parent.arguments();
       let structDef: FinalizeSourceDef = {
         ...outputStruct,
@@ -2376,7 +2374,6 @@ export class QueryQuery extends QueryField {
           } catch (_e) {
             // swallow event stream failures
           }
-          debugLog('pipeline stage enter', stageEnterPayload);
           if (process.env['MALLOY_DEBUG_ARGS']) {
             // eslint-disable-next-line no-console
             console.log('[malloy args] stage enter', {
@@ -2414,7 +2411,6 @@ export class QueryQuery extends QueryField {
           } catch (_e) {
             // ignore event stream issues
           }
-          debugLog('pipeline stage exit', stageExitPayload);
           if (process.env['MALLOY_DEBUG_ARGS']) {
             // eslint-disable-next-line no-console
             console.log('[malloy args] stage exit', {
@@ -2451,10 +2447,6 @@ export class QueryQuery extends QueryField {
     } catch (_e) {
       // ignore
     }
-    debugLog('pipeline final', {
-      scope: getIdentifier(this.parent.structDef),
-      finalArgumentKeys: Object.keys(finalArgs ?? {}),
-    });
     return {
       lastStageName,
       outputStruct,

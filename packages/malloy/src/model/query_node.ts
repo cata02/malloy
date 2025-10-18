@@ -27,7 +27,6 @@ import type {
   SourceDef,
   Query,
 } from './malloy_types';
-import {debugLog} from '../util/debug_log';
 import {
   isSourceDef,
   getIdentifier,
@@ -608,14 +607,6 @@ export class QueryStruct {
           }
         }
       }
-      debugLog('query-struct source-args', {
-        scope: scopeIdentifier,
-        structType: this.structDef.type,
-        parameterKeys: Object.keys(params),
-        argumentKeys: Object.keys(this.structDef.arguments ?? {}),
-        sourceArgumentKeys: Object.keys(this.sourceArguments ?? {}),
-        resolvedKeys: Object.keys(this._arguments),
-      });
       if (process.env['MALLOY_DEBUG_ARGS']) {
         const valueSummary: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(this._arguments)) {
@@ -653,18 +644,10 @@ export class QueryStruct {
         Object.keys(this.sourceArguments).length > 0
       ) {
         this._arguments = {...this.sourceArguments};
-        debugLog('query-struct non-source provided', {
-          scope: scopeIdentifier,
-          providedKeys: Object.keys(this.sourceArguments),
-        });
       } else if (this.parent) {
         this._arguments = {...this.parent.arguments()};
-        debugLog('query-struct non-source inherited', {
-          scope: scopeIdentifier,
-          parentKeys: Object.keys(this._arguments),
-        });
       } else {
-        debugLog('query-struct non-source empty', {scope: scopeIdentifier});
+        this._arguments = {};
       }
     }
 
@@ -685,7 +668,6 @@ export class QueryStruct {
           !isSourceDef(this.structDef) && sourceArgKeys.length === 0,
       } satisfies Record<string, unknown>;
       this.eventStream?.emit('debug-args-node', payload);
-      debugLog('query-struct arguments', payload);
       if (process.env['MALLOY_DEBUG_ARGS']) {
         const detailed: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(this._arguments)) {

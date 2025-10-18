@@ -56,21 +56,6 @@ export class QuerySource extends Source {
     // Pass parameter space to supported query elements
     assignParameterSpace(this.query, parameterSpace);
     const comp = this.query.queryComp(false);
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] QuerySource.withParameters', {
-        querySourceArguments: Object.keys(comp.query.sourceArguments || {}),
-        querySourceArgumentNodes: Object.fromEntries(
-          Object.entries(comp.query.sourceArguments || {}).map(
-            ([k, v]: any) => [
-              k,
-              v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
-            ]
-          )
-        ),
-        pListLength: pList?.length || 0,
-      });
-    }
     const queryStruct: QuerySourceDef = {
       ...comp.outputStruct,
       name: `QuerySource-${uuidv4()}`,

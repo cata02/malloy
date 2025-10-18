@@ -33,7 +33,6 @@ import type {View} from '../view-elements/view';
 import {checkRequiredGroupBys} from '../../composite-source-utils';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import {assignParameterSpace} from './parameter-space';
-import {debugLog} from '../../../util/debug_log';
 
 /**
  * A query operation that adds segments to a LHS source or query.
@@ -91,14 +90,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         'public',
         this.parameterSpace
       );
-      debugLog('query-arrow source entry', {
-        element: this.view.elementType,
-        source: inputStruct.name ?? inputStruct.type,
-        parameterKeys: Object.keys(inputStruct.parameters ?? {}),
-        parameterSpaceKeys: this.parameterSpace
-          ? this.parameterSpace.parameterNames()
-          : [],
-      });
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment
       // Ensure any in-scope parameters are available to the LHS query element
@@ -115,13 +106,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         'public',
         this.parameterSpace
       );
-      debugLog('query-arrow lhs entry', {
-        source: lhsQuery.outputStruct.name ?? lhsQuery.outputStruct.type,
-        parameterKeys: Object.keys(lhsQuery.outputStruct.parameters ?? {}),
-        parameterSpaceKeys: this.parameterSpace
-          ? this.parameterSpace.parameterNames()
-          : [],
-      });
     }
     const {
       pipeline: rhsPipeline,
@@ -230,10 +214,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         ),
       });
     }
-    debugLog('query-arrow return', {
-      outputSource: outputStruct.name ?? outputStruct.type,
-      outputParameterKeys: Object.keys(outputStruct.parameters ?? {}),
-    });
     return comp;
   }
 }

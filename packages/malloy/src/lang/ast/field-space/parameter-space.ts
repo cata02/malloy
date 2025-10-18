@@ -23,12 +23,6 @@ export class ParameterSpace implements FieldSpace {
   private readonly _map: Record<string, SpaceEntry>;
   constructor(parameters: HasParameter[]) {
     this._map = {};
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] parameter-space create', {
-        parameters: parameters.map(p => p.name),
-      });
-    }
     for (const parameter of parameters) {
       this._map[parameter.name] = new AbstractParameter(parameter);
     }
@@ -43,14 +37,6 @@ export class ParameterSpace implements FieldSpace {
   }
 
   entry(name: string): SpaceEntry | undefined {
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] parameter-space entry', {
-        name,
-        hasEntry: name in this._map,
-        available: Object.keys(this._map),
-      });
-    }
     return this._map[name];
   }
 
@@ -67,13 +53,6 @@ export class ParameterSpace implements FieldSpace {
     }
     const entry = this.entry(name.refString);
     if (entry === undefined) {
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        // eslint-disable-next-line no-console
-        console.log('[malloy debug] parameter-space lookup miss', {
-          name: name.refString,
-          available: Object.keys(this._map),
-        });
-      }
       return {
         error: {
           message: `\`${name}\` is not defined`,
@@ -91,12 +70,6 @@ export class ParameterSpace implements FieldSpace {
         },
         found: undefined,
       };
-    }
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] parameter-space lookup hit', {
-        name: name.refString,
-      });
     }
     return {
       found: entry,

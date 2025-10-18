@@ -291,15 +291,6 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
 
   parameterSpace(): ParameterSpace {
     if (this.parameterSpaceRef) {
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        // eslint-disable-next-line no-console
-        console.log('[malloy args] static-space reuse', {
-          source: this.source.name ?? this.source.type,
-          parameterKeys: this.parameterSpaceRef
-            ? this.parameterSpaceRef.parameterNames()
-            : [],
-        });
-      }
       return this.parameterSpaceRef;
     }
     const parameters: HasParameter[] = [];
@@ -317,13 +308,6 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
       }
     }
     const paramSpace = new ParameterSpaceImpl(parameters);
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy args] static-space new', {
-        source: this.source.name ?? this.source.type,
-        parameterKeys: parameters.map(p => p.name),
-      });
-    }
     return paramSpace;
   }
 }
