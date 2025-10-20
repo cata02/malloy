@@ -6,9 +6,9 @@
 
 ## Executive Summary
 
-✅ **Zero regressions** vs main branch  
-✅ **+30 tests fixed** (87→117 passing)  
-⚠️ **8 new tests failing** (incomplete implementations, not regressions)  
+✅ **Zero regressions** vs main branch
+✅ **+30 tests fixed** (87→117 passing)
+⚠️ **8 new tests failing** (incomplete implementations, not regressions)
 🎉 **Pattern 3 COMPLETE!** - Join pipeline parameters fully working
 
 ## Test Status vs Main
@@ -49,7 +49,7 @@ Successfully enabled these parameter scenarios (+20 tests):
 **Status:** FIXED! 10 out of 11 Pattern 3 tests now passing
 
 **What Was Fixed:**
-- ✅ "join_one parameterized source with pipeline" 
+- ✅ "join_one parameterized source with pipeline"
 - ✅ "join_one with pipeline where inner stage references param"
 - ✅ "join_one simple source with pipeline referencing outer param"
 - ✅ "join passes param into parameterized joined source (view stage)"

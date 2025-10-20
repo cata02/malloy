@@ -227,15 +227,17 @@ export class NamedSource extends Source {
           parameter.type === 'filter expression' &&
           parameter.filterType
         ) {
-          if (value.node === 'parameter') {
-            const filterType = pVal['filterType'] ?? 'missing-filter-type';
-            if (parameter.filterType !== filterType) {
-              argument.value.logError(
-                'filter-expression-type',
-                `Parameter types filter<${parameter.filterType}> and filter<${filterType}> do not match`
-              );
-            }
-          } else {
+          // Check filterType from pVal (captured before resolution)
+          const filterType = pVal['filterType'];
+          // Only check type mismatch if both types are known (not missing due to syntax errors)
+          if (filterType && parameter.filterType !== filterType) {
+            argument.value.logError(
+              'filter-expression-type',
+              `Parameter types filter<${parameter.filterType}> and filter<${filterType}> do not match`
+            );
+          }
+          // Also validate the concrete expression if it's not a parameter
+          if (value.node !== 'parameter') {
             checkFilterExpression(argument.value, parameter.filterType, value);
           }
         }
