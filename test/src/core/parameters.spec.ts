@@ -611,12 +611,13 @@ describe('parameters', () => {
       source: inner_source is duckdb.table('malloytest.state_facts')
       source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
         view: v is {
-          group_by: state
-          join_one: inner is inner_source on inner.state = p
+          join_one: i is inner_source on i.state = p
+          where: state = p
+          group_by: state, i_state is i.state
         }
       }
       run: outer(p is 'CA') -> v
-    `).malloyResultMatches(runtime, {state: 'CA'});
+    `).malloyResultMatches(runtime, {state: 'CA', i_state: 'CA'});
   });
 
   it.skip('join-in-view: param used inside join pipeline', async () => {
@@ -653,11 +654,12 @@ describe('parameters', () => {
       source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
         view: v is {
           join_one: i is inner_tbl on i.state = p
-          group_by: state
+          where: state = p
+          group_by: state, i_state is i.state
         }
       }
       run: outer(p is 'CA') -> v
-    `).malloyResultMatches(runtime, {state: 'CA'});
+    `).malloyResultMatches(runtime, {state: 'CA', i_state: 'CA'});
   });
 
   // TODO fix this when we redo namespaces
