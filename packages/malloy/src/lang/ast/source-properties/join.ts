@@ -257,6 +257,22 @@ export class ExpressionJoin extends Join {
       }
     }
 
+    // DEBUG: Log what parameter space we're passing to the source
+    const sourceType = source.elementType || source.constructor.name;
+    if (mergedParameterSpace) {
+      const paramNames = Array.from(mergedParameterSpace.entries()).map(
+        ([name]) => name
+      );
+      console.log(
+        `[ExpressionJoin.getStructDef] Passing parameterSpace to ${sourceType} with params:`,
+        paramNames
+      );
+    } else {
+      console.log(
+        `[ExpressionJoin.getStructDef] No parameterSpace for ${sourceType}`
+      );
+    }
+
     const sourceDef = source.getSourceDef(mergedParameterSpace);
 
     // For sources that already have arguments (NamedSource with args or QuerySource),
@@ -265,6 +281,11 @@ export class ExpressionJoin extends Join {
     const hasExistingArguments =
       (source instanceof NamedSource && source.args) ||
       (sourceDef.arguments && Object.keys(sourceDef.arguments).length > 0);
+    console.log(
+      `[ExpressionJoin.getStructDef] hasExistingArguments: ${hasExistingArguments}, sourceDef.arguments:`,
+      Object.keys(sourceDef.arguments || {})
+    );
+
     if (!hasExistingArguments) {
       // Extract outer arguments from the parameter space and merge them into the sourceDef
       const outerArguments: Record<string, Argument> = {};
@@ -274,6 +295,10 @@ export class ExpressionJoin extends Join {
         }
       }
 
+      console.log(
+        `[ExpressionJoin.getStructDef] Merging outer arguments:`,
+        Object.keys(outerArguments)
+      );
       // Merge outer arguments into the sourceDef's arguments
       sourceDef.arguments = {...sourceDef.arguments, ...outerArguments};
     }

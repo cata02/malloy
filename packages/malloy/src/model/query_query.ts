@@ -126,6 +126,9 @@ function pushDialectField(dl: DialectFieldList, f: DialectFieldArg) {
   }
 }
 
+// Track recursion depth for cycle detection
+const structSQLCallStack = new Set<string>();
+
 /** Query builder object. */
 export class QueryQuery extends QueryField {
   fieldDef: TurtleDef;
@@ -166,6 +169,24 @@ export class QueryQuery extends QueryField {
     isJoinedSubquery: boolean,
     lookupStruct: (name: string) => QueryStruct | undefined
   ): QueryQuery {
+    const stack =
+      new Error().stack
+        ?.split('\n')
+        .slice(1, 8)
+        .map(s => s.trim())
+        .join('\n  ') || 'no stack';
+    console.log('[QueryQuery.makeQuery] Called with parentStruct:', {
+      parentDefType: parentStruct.structDef.type,
+      parentDefName: parentStruct.structDef.name,
+      parentHasParent: !!parentStruct.parent,
+      parentParentName: parentStruct.parent?.structDef?.name,
+      parentSourceArgs: parentStruct.sourceArguments
+        ? Object.keys(parentStruct.sourceArguments)
+        : [],
+      isJoinedSubquery,
+      callStack: stack,
+    });
+
     if (process.env['MALLOY_DEBUG_ARGS']) {
       // eslint-disable-next-line no-console
       console.log('[malloy debug] QueryQuery.makeQuery', {
@@ -541,7 +562,36 @@ export class QueryQuery extends QueryField {
 
   prepare(_stageWriter: StageWriter | undefined) {
     if (!this.prepared) {
+      const stack =
+        new Error().stack?.split('\n').slice(1, 6).join('\n  ') || 'no stack';
+      console.log(
+        '\n╔═══════════════════════════════════════════════════════════╗'
+      );
+      console.log(
+        '║  [QueryQuery.prepare] STARTING PREPARE                    ║'
+      );
+      console.log(
+        '╚═══════════════════════════════════════════════════════════╝'
+      );
+      console.log('[QueryQuery.prepare] Context:', {
+        parentDefType: this.parent.structDef.type,
+        parentDefName: this.parent.structDef.name,
+        parentHasParent: !!this.parent.parent,
+        parentParentName: this.parent.parent?.structDef?.name,
+        parentSourceArgs: this.parent.sourceArguments
+          ? Object.keys(this.parent.sourceArguments)
+          : [],
+        callStack: stack,
+      });
+
+      console.log(
+        '[QueryQuery.prepare] About to call expandRecordExpressions...'
+      );
       this.expandRecordExpressions(this.rootResult, this.parent);
+
+      console.log(
+        '[QueryQuery.prepare] About to call addStructToJoin for ROOT (this.parent)...'
+      );
       // Add the root base join to the joins map
       this.rootResult.addStructToJoin(this.parent, undefined);
       // Keep evaluation source-of-truth in arguments(); do not attach runtime bags
@@ -563,11 +613,126 @@ export class QueryQuery extends QueryField {
   }
 
   private findJoins(resultStruct: FieldInstanceResult): void {
+    const stack =
+      new Error().stack?.split('\n').slice(1, 5).join('\n  ') || 'no stack';
+    console.log(
+      '\n═══════════════════════════════════════════════════════════'
+    );
+    console.log('[findJoins] START - Parent info:', {
+      parentType: this.parent.structDef.type,
+      parentName: this.parent.structDef.name,
+      parentHasParent: !!this.parent.parent,
+      parentParentName: this.parent.parent?.structDef?.name,
+      fieldsCount: this.parent.structDef.fields?.length || 0,
+      allFieldNames: this.parent.structDef.fields?.map(f => f.name) || [],
+      currentJoinsInMap: Array.from(resultStruct.root().joins.keys()),
+      callStack: stack,
+    });
+
+    let fieldIndex = 0;
     for (const dim of resultStruct.fields()) {
+      const fieldName = dim.f.fieldDef.name;
+      const fieldDef = dim.f.fieldDef;
+
+      console.log(`\n--- [findJoins] Field ${fieldIndex++}: ${fieldName} ---`);
+      console.log('[findJoins] Field details:', {
+        fieldName,
+        fieldType: fieldDef.type,
+        fieldAs: (fieldDef as any).as,
+        isQueryFieldStruct: dim.f instanceof QueryFieldStruct,
+        isJoinField: 'join' in fieldDef,
+        fieldDefKeys: Object.keys(fieldDef).filter(
+          k => !['location', 'annotation'].includes(k)
+        ),
+      });
+
       if (!(dim.f instanceof QueryFieldStruct)) {
-        resultStruct.addStructToJoin(dim.f.getJoinableParent(), undefined);
+        console.log(
+          `[findJoins] Field ${fieldName} is NOT QueryFieldStruct, getting joinableParent...`
+        );
+
+        // Log the field's parent chain BEFORE calling getJoinableParent
+        console.log(`[findJoins] Field ${fieldName} parent chain:`, {
+          fieldParentType: dim.f.parent.structDef.type,
+          fieldParentName: dim.f.parent.structDef.name,
+          fieldParentHasParent: !!dim.f.parent.parent,
+          fieldParentParentName: dim.f.parent.parent?.structDef?.name,
+        });
+
+        const joinableParent = dim.f.getJoinableParent();
+
+        console.log(`[findJoins] Got joinableParent for field ${fieldName}:`, {
+          parentDefType: joinableParent.structDef.type,
+          parentDefName: joinableParent.structDef.name,
+          parentHasParent: !!joinableParent.parent,
+          parentParentName: joinableParent.parent?.structDef?.name,
+        });
+
+        // Detailed check for self-reference
+        const isSelfReference =
+          joinableParent.structDef.name === 'sf' ||
+          joinableParent.structDef.name === this.parent.structDef.name;
+
+        if (isSelfReference) {
+          console.error('\n🚨🚨🚨 SELF-REFERENCE DETECTED! 🚨🚨🚨');
+          console.error(
+            `[findJoins] Field ${fieldName} is causing self-reference!`,
+            {
+              fieldName,
+              fieldType: dim.f.fieldDef.type,
+              joinableParentName: joinableParent.structDef.name,
+              joinableParentType: joinableParent.structDef.type,
+              currentContextName: this.parent.structDef.name,
+              currentContextType: this.parent.structDef.type,
+              WHY: 'This field is trying to join the structure to itself!',
+            }
+          );
+
+          // Log complete parent chain
+          let cur: any = dim.f.parent;
+          let depth = 0;
+          console.error(
+            '[findJoins] Complete parent chain of problematic field:'
+          );
+          while (cur && depth < 10) {
+            console.error(
+              `  [${depth}] ${cur.structDef.type}:${
+                cur.structDef.name
+              }, hasParent: ${!!cur.parent}`
+            );
+            cur = cur.parent;
+            depth++;
+          }
+        }
+
+        console.log(
+          `[findJoins] About to call addStructToJoin for ${fieldName} with parent: ${joinableParent.structDef.name}`
+        );
+        resultStruct.addStructToJoin(joinableParent, undefined);
+        console.log(
+          '[findJoins] After addStructToJoin, joins in map:',
+          Array.from(resultStruct.root().joins.keys())
+        );
+      } else {
+        console.log(
+          `[findJoins] Field ${fieldName} IS QueryFieldStruct (a join field):`,
+          {
+            queryStructDefType: dim.f.queryStruct.structDef.type,
+            queryStructDefName: dim.f.queryStruct.structDef.name,
+            queryStructHasParent: !!dim.f.queryStruct.parent,
+            queryStructParentName: dim.f.queryStruct.parent?.structDef?.name,
+          }
+        );
       }
     }
+
+    console.log(
+      '\n[findJoins] COMPLETE - Final joins in map:',
+      Array.from(resultStruct.root().joins.keys())
+    );
+    console.log(
+      '═══════════════════════════════════════════════════════════\n'
+    );
 
     for (const s of resultStruct.structs()) {
       this.findJoins(s);
@@ -812,6 +977,36 @@ export class QueryQuery extends QueryField {
   }
 
   getStructSourceSQL(qs: QueryStruct, stageWriter: StageWriter): string {
+    const structKey = `${qs.structDef.type}:${qs.structDef.name}`;
+    console.log('[getStructSourceSQL] Called with struct type:', {
+      type: qs.structDef.type,
+      name: qs.structDef.name,
+      callStackSize: structSQLCallStack.size,
+    });
+
+    // Detect infinite recursion
+    if (structSQLCallStack.has(structKey)) {
+      console.error(
+        `⚠️⚠️⚠️  CYCLE DETECTED in getStructSourceSQL for: ${structKey}`
+      );
+      console.error('Call stack:', Array.from(structSQLCallStack));
+      throw new Error(
+        `Infinite recursion detected in SQL generation for: ${structKey}`
+      );
+    }
+
+    structSQLCallStack.add(structKey);
+    try {
+      return this._getStructSourceSQLImpl(qs, stageWriter);
+    } finally {
+      structSQLCallStack.delete(structKey);
+    }
+  }
+
+  private _getStructSourceSQLImpl(
+    qs: QueryStruct,
+    stageWriter: StageWriter
+  ): string {
     switch (qs.structDef.type) {
       case 'table':
         return this.parent.dialect.quoteTablePath(qs.structDef.tablePath);
@@ -826,6 +1021,16 @@ export class QueryQuery extends QueryField {
       case 'nest_source':
         return qs.structDef.pipeSQL;
       case 'query_source': {
+        console.log('[getStructSourceSQL] Processing query_source:', {
+          querySourceName: qs.structDef.name,
+          queryStructRef: qs.structDef.query.structRef,
+          queryStructRefType: typeof qs.structDef.query.structRef,
+          queryStructRefName:
+            typeof qs.structDef.query.structRef === 'string'
+              ? qs.structDef.query.structRef
+              : (qs.structDef.query.structRef as any)?.name || 'inline',
+        });
+
         // cache derived table.
         if (
           qs.prepareResultOptions?.replaceMaterializedReferences &&
@@ -849,6 +1054,16 @@ export class QueryQuery extends QueryField {
 
           const structRef = query.compositeResolvedSourceDef ?? query.structRef;
 
+          console.log('[getStructSourceSQL] query_source structRef type:', {
+            isString: typeof structRef === 'string',
+            structRefType: typeof structRef,
+            structRefName:
+              typeof structRef === 'string'
+                ? structRef
+                : (structRef as any)?.name,
+            queryName: query.name,
+          });
+
           let sourceStruct: QueryStruct;
           if (typeof structRef === 'string') {
             const struct = this.structRefToQueryStruct(structRef);
@@ -861,28 +1076,106 @@ export class QueryQuery extends QueryField {
             // so parameter references can be resolved correctly
             // Resolve any parameter references in the arguments using qs.parent chain
             const rawArgs = query.sourceArguments || {};
+
+            console.error('\n=== PARAM RESOLUTION START ===');
+            console.error(
+              '[PARAM DEBUG] querySourceArgumentsKeys:',
+              Object.keys(rawArgs)
+            );
+            console.error(
+              '[PARAM DEBUG] qsSourceArgumentsKeys:',
+              qs.sourceArguments ? Object.keys(qs.sourceArguments) : []
+            );
+            console.error('[PARAM DEBUG] qsHasParent:', !!qs.parent);
+            console.error(
+              '[PARAM DEBUG] qsParentType:',
+              qs.parent?.structDef?.type
+            );
+            console.error(
+              '[PARAM DEBUG] qsParentName:',
+              qs.parent?.structDef?.name
+            );
+
+            // Try to use qs.sourceArguments if query.sourceArguments is empty
+            const baseArgs =
+              Object.keys(rawArgs).length > 0
+                ? rawArgs
+                : qs.sourceArguments || {};
+            console.error(
+              '[PARAM DEBUG] Using baseArgs from:',
+              Object.keys(rawArgs).length > 0
+                ? 'query.sourceArguments'
+                : 'qs.sourceArguments'
+            );
+            console.error(
+              '[PARAM DEBUG] baseArgs keys:',
+              Object.keys(baseArgs)
+            );
+
             const effectiveArgs: Record<string, Argument> = {};
-            for (const [argName, argVal] of Object.entries(rawArgs)) {
+            for (const [argName, argVal] of Object.entries(baseArgs)) {
               let value = argVal.value;
+              console.log(`🔍 Processing arg '${argName}':`, {
+                hasValue: !!value,
+                valueNode: value?.node,
+                valueType: typeof value,
+              });
+
               // Resolve parameter references by walking up the parent chain
               if (value?.node === 'parameter' && qs.parent) {
                 const refName = value.path[0];
+                console.log(
+                  `🔍 Arg '${argName}' is parameter reference to '${refName}', walking parent chain...`
+                );
                 let cur: QueryStruct | undefined = qs.parent;
-                while (cur) {
+                let depth = 0;
+                while (cur && depth < 10) {
                   const parentArgs = cur.arguments();
+                  console.log(
+                    `🔍   [${depth}] ${cur.structDef.type}:${cur.structDef.name}`,
+                    {
+                      hasArgs: Object.keys(parentArgs).length > 0,
+                      argKeys: Object.keys(parentArgs),
+                      hasRefName: !!parentArgs[refName],
+                      hasValue: !!parentArgs[refName]?.value,
+                    }
+                  );
                   if (parentArgs[refName]?.value) {
                     value = parentArgs[refName].value;
+                    console.log(
+                      `🔍   ✅ Found value for '${refName}' at depth ${depth}!`
+                    );
                     break;
                   }
                   cur = cur.parent;
+                  depth++;
+                }
+                if (!value || value.node === 'parameter') {
+                  console.log(
+                    `🔍   ❌ Could not resolve parameter '${refName}' from parent chain`
+                  );
                 }
               }
               effectiveArgs[argName] = {...argVal, value};
             }
+            console.error(
+              '[PARAM DEBUG] Final effectiveArgs keys:',
+              Object.keys(effectiveArgs)
+            );
+            for (const [k, v] of Object.entries(effectiveArgs)) {
+              console.error(
+                `[PARAM DEBUG]   ${k}: hasValue=${!!v.value}, valueNode=${v
+                  .value?.node}, type=${v.type}`
+              );
+            }
+            console.error('=== PARAM RESOLUTION END ===\n');
+            // FIX: Don't set query_source as parent to avoid self-references
+            // The base table inside a query_source's pipeline should be treated as root
+            // for its own context. Parameters are already resolved in effectiveArgs.
             sourceStruct = new QueryStruct(
               struct.structDef,
               effectiveArgs,
-              {struct: qs},
+              {model: this.parent.model},
               qs.prepareResultOptions
             );
           } else {
@@ -898,14 +1191,56 @@ export class QueryQuery extends QueryField {
                 qsSourceArgumentsValues: qs.sourceArguments,
               });
             }
-            // Prefer arguments on the join field struct (qs.structDef.arguments),
-            // then structRef.arguments, then query.sourceArguments
+            // Prefer arguments with actual values: qs.sourceArguments (runtime values),
+            // then qs.structDef.arguments, then structRef.arguments, then query.sourceArguments
+            console.error('\n=== PARAM RESOLUTION START (else branch) ===');
+            console.error(
+              '[PARAM DEBUG] qs.sourceArguments:',
+              qs.sourceArguments ? Object.keys(qs.sourceArguments) : 'none'
+            );
+            console.error(
+              '[PARAM DEBUG] qs.structDef.arguments:',
+              (qs.structDef as any).arguments
+                ? Object.keys((qs.structDef as any).arguments)
+                : 'none'
+            );
+            console.error(
+              '[PARAM DEBUG] structRef.arguments:',
+              (structRef as any).arguments
+                ? Object.keys((structRef as any).arguments)
+                : 'none'
+            );
+            console.error(
+              '[PARAM DEBUG] query.sourceArguments:',
+              query.sourceArguments
+                ? Object.keys(query.sourceArguments)
+                : 'none'
+            );
+
             const baseArgs: Record<string, any> =
+              qs.sourceArguments || // ADDED: Try runtime arguments first!
               ((qs.structDef as any).arguments as Record<string, any>) ||
               ((structRef as any).arguments as Record<string, any>) ||
               query.sourceArguments ||
               {} ||
               {};
+            console.error(
+              '[PARAM DEBUG] Using baseArgs from:',
+              qs.sourceArguments
+                ? 'qs.sourceArguments'
+                : (qs.structDef as any).arguments
+                ? 'qs.structDef.arguments'
+                : (structRef as any).arguments
+                ? 'structRef.arguments'
+                : query.sourceArguments
+                ? 'query.sourceArguments'
+                : 'empty'
+            );
+            console.error(
+              '[PARAM DEBUG] baseArgs keys:',
+              Object.keys(baseArgs)
+            );
+
             const effectiveArgs: Record<string, any> = {...baseArgs};
             if (process.env['MALLOY_DEBUG_ARGS']) {
               // eslint-disable-next-line no-console
@@ -1035,13 +1370,46 @@ export class QueryQuery extends QueryField {
             } catch (_e) {
               // best-effort resolution; fall back to original
             }
+            console.error(
+              '[PARAM DEBUG] Final effectiveArgs keys:',
+              Object.keys(effectiveArgs)
+            );
+            for (const [k, v] of Object.entries(effectiveArgs)) {
+              console.error(
+                `[PARAM DEBUG]   ${k}: hasValue=${!!(v as any)
+                  .value}, valueNode=${(v as any).value?.node}, type=${
+                  (v as any).type
+                }`
+              );
+            }
+            console.error('=== PARAM RESOLUTION END (else branch) ===\n');
+            // FIX: Don't set query_source as parent to avoid self-references
+            // The base table inside a query_source's pipeline should be treated as root
+            // for its own context. Parameters are already resolved in effectiveArgs.
             sourceStruct = new QueryStruct(
               structRef,
               effectiveArgs,
-              {struct: qs},
+              {model: this.parent.model},
               qs.prepareResultOptions
             );
           }
+
+          // DEBUG: Check if sourceStruct has parent
+          console.log(
+            '[getStructSourceSQL] Created sourceStruct for base table:',
+            {
+              sourceStructDefType: sourceStruct.structDef?.type,
+              sourceStructDefName: sourceStruct.structDef?.name,
+              sourceStructHasParent: !!sourceStruct.parent,
+              sourceStructParentName: sourceStruct.parent?.structDef?.name,
+              sourceStructParentType: sourceStruct.parent?.structDef?.type,
+              sourceStructArgs: Object.keys(sourceStruct.sourceArguments || {}),
+              originalQsDefType: qs.structDef?.type,
+              originalQsName: qs.structDef?.name,
+              originalQsHasParent: !!qs.parent,
+              originalQsParentName: qs.parent?.structDef?.name,
+            }
+          );
 
           if (process.env['MALLOY_DEBUG_ARGS']) {
             // eslint-disable-next-line no-console
@@ -1086,11 +1454,45 @@ export class QueryQuery extends QueryField {
     let s = '';
     const qs = ji.queryStruct;
     const qsDef = qs.structDef;
+
+    console.log('[generateSQLJoinBlock] Processing join:', {
+      qsDefType: qsDef.type,
+      qsDefName: qsDef.name,
+      qsHasParent: !!qs.parent,
+      qsParentName: qs.parent?.structDef?.name,
+    });
+
+    // GUARD: Skip self-referencing joins to prevent infinite recursion
+    // Check if we're already generating SQL for this same structure
+    // TODO: This is a band-aid fix - need to find root cause of self-reference
+    if (structSQLCallStack.has(`${qsDef.type}:${qsDef.name}`)) {
+      console.warn(
+        `⚠️  [generateSQLJoinBlock] Skipping self-referencing join: ${qsDef.name}`
+      );
+      console.warn(
+        `   Context: parent=${this.parent.structDef.name}, depth=${depth}`
+      );
+      console.warn('   Current SQL stack:', Array.from(structSQLCallStack));
+      // Return empty string to skip this join
+      return '';
+    }
+
     qs.eventStream?.emit('join-used', {name: getIdentifier(qsDef)});
     qs.maybeEmitParameterizedSourceUsage();
     if (isJoinedSource(qsDef)) {
       let structSQL = this.getStructSourceSQL(qs, stageWriter);
       const matrixOperation = (qsDef.matrixOperation || 'left').toUpperCase();
+
+      console.error('🔗 [JOIN TYPE] Join details:', {
+        joinName: qsDef.name,
+        definedMatrixOperation: qsDef.matrixOperation,
+        effectiveMatrixOperation: matrixOperation,
+        joinType: qsDef.join,
+        hasOnExpression: !!qsDef.onExpression,
+        hasPrimaryKey: qs.parent
+          ? !!(qs.parent.structDef as any).primaryKey
+          : false,
+      });
       if (!this.parent.dialect.supportsFullJoin && matrixOperation === 'FULL') {
         throw new Error('FULL JOIN not supported');
       }
@@ -1101,10 +1503,24 @@ export class QueryQuery extends QueryField {
         )}, x.* ${passKeys} FROM ${structSQL} as x)`;
       }
       let onCondition = '';
+      console.error('\n🔗 [JOIN CONDITION] Generating join ON clause for:', {
+        joinName: qsDef.name,
+        joinType: qsDef.type,
+        hasParent: !!qs.parent,
+        parentName: qs.parent?.structDef?.name,
+        parentType: qs.parent?.structDef?.type,
+        hasOnExpression: !!qsDef.onExpression,
+        hasPrimaryKey: !!(qs.structDef as any).primaryKey,
+        primaryKey: (qs.structDef as any).primaryKey,
+        parentHasPrimaryKey: !!(qs.parent?.structDef as any)?.primaryKey,
+        parentPrimaryKey: (qs.parent?.structDef as any)?.primaryKey,
+      });
+
       if (qs.parent === undefined) {
         throw new Error('Expected joined struct to have a parent.');
       }
       if (qsDef.onExpression) {
+        console.error('🔗 [JOIN CONDITION] Using explicit onExpression');
         if (process.env['MALLOY_DEBUG_ARGS']) {
           try {
             const lhsArgs = Object.fromEntries(
@@ -1144,8 +1560,36 @@ export class QueryQuery extends QueryField {
           undefined
         );
         onCondition = tempInstance.generateExpression();
+        console.error('🔗 [JOIN CONDITION] Generated condition:', onCondition);
       } else {
-        onCondition = '1=1';
+        // No explicit ON expression - try to use primary key
+        const parentPrimaryKey = (qs.parent.structDef as any).primaryKey;
+        if (parentPrimaryKey && ji.parent) {
+          console.error(
+            '🔗 [JOIN CONDITION] No onExpression, using parent primary key:',
+            parentPrimaryKey
+          );
+          // Generate primary key join: parent.pk = join.pk
+          const parentAlias = ji.parent.alias;
+          const joinAlias = ji.alias;
+          const pkField =
+            typeof parentPrimaryKey === 'string'
+              ? parentPrimaryKey
+              : parentPrimaryKey[0]; // Handle composite keys (use first for now)
+
+          onCondition = `${parentAlias}.${qs.dialect.sqlMaybeQuoteIdentifier(
+            pkField
+          )}=${joinAlias}.${qs.dialect.sqlMaybeQuoteIdentifier(pkField)}`;
+          console.error(
+            '🔗 [JOIN CONDITION] Generated primary key condition:',
+            onCondition
+          );
+        } else {
+          console.error(
+            '🔗 [JOIN CONDITION] No onExpression and no primary key, falling back to 1=1'
+          );
+          onCondition = '1=1';
+        }
       }
       let filters = '';
       let conditions: string[] | undefined = undefined;

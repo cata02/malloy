@@ -48,6 +48,24 @@ export class QueryArrow extends QueryBase implements QueryElement {
     public parameterSpace?: ParameterSpace
   ) {
     super({source, view});
+    // DEBUG: Log QueryArrow construction
+    const sourceType =
+      source instanceof Source
+        ? (source as any).elementType || source.constructor.name
+        : 'QueryElement';
+    if (parameterSpace) {
+      const paramNames = Array.from(parameterSpace.entries()).map(
+        ([name]) => name
+      );
+      console.log(
+        `[QueryArrow constructor] Created with source: ${sourceType}, parameterSpace:`,
+        paramNames
+      );
+    } else {
+      console.log(
+        `[QueryArrow constructor] Created with source: ${sourceType}, NO parameterSpace`
+      );
+    }
   }
 
   queryComp(isRefOk: boolean): QueryComp {
@@ -90,6 +108,24 @@ export class QueryArrow extends QueryBase implements QueryElement {
         'public',
         this.parameterSpace
       );
+      // DEBUG: Log fieldSpace parameter info
+      const sourceType =
+        this.source instanceof Source
+          ? this.source.elementType || this.source.constructor.name
+          : 'QueryElement';
+      if (this.parameterSpace) {
+        const paramNames = Array.from(this.parameterSpace.entries()).map(
+          ([name]) => name
+        );
+        console.log(
+          `[QueryArrow.queryComp] Source: ${sourceType}, fieldSpace WITH parameterSpace:`,
+          paramNames
+        );
+      } else {
+        console.log(
+          `[QueryArrow.queryComp] Source: ${sourceType}, fieldSpace WITHOUT parameterSpace`
+        );
+      }
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment
       // Ensure any in-scope parameters are available to the LHS query element
@@ -106,7 +142,25 @@ export class QueryArrow extends QueryBase implements QueryElement {
         'public',
         this.parameterSpace
       );
+      // DEBUG: Log fieldSpace parameter info
+      const sourceType2 = 'QueryElement';
+      if (this.parameterSpace) {
+        const paramNames = Array.from(this.parameterSpace.entries()).map(
+          ([name]) => name
+        );
+        console.log(
+          `[QueryArrow.queryComp] Source: ${sourceType2}, fieldSpace WITH parameterSpace:`,
+          paramNames
+        );
+      } else {
+        console.log(
+          `[QueryArrow.queryComp] Source: ${sourceType2}, fieldSpace WITHOUT parameterSpace`
+        );
+      }
     }
+    console.log(
+      '[QueryArrow.queryComp] Calling view.pipelineComp with fieldSpace'
+    );
     const {
       pipeline: rhsPipeline,
       annotation,
@@ -186,6 +240,19 @@ export class QueryArrow extends QueryBase implements QueryElement {
         }
       }
     }
+
+    console.log('[QueryArrow.queryComp] Creating comp.query:', {
+      inputStructName: inputStruct.name,
+      inputStructType: inputStruct.type,
+      inputStructArguments: inputStruct.arguments
+        ? Object.keys(inputStruct.arguments)
+        : [],
+      sourceArgumentsKeys: Object.keys(sourceArguments),
+      sourceArgumentsHasValues: Object.entries(sourceArguments).map(
+        ([k, v]) => [k, !!(v as any).value]
+      ),
+      pipelineLength: query.pipeline.length,
+    });
 
     const comp = {
       query: {

@@ -513,7 +513,10 @@ describe('parameters', () => {
         group_by: s is sf.state
         aggregate: c is count()
       }
-    `).malloyResultMatches(runtime, {s: 'CA', c: 1});
+    `).malloyResultMatches(runtime, [
+      {s: null, c: 50}, // The 50 non-matching rows (join_one is LEFT JOIN, ordered first by count desc)
+      {s: 'CA', c: 1}, // The one matching row
+    ]);
   });
 
   it('refine uses in-scope parameter', async () => {

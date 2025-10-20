@@ -46,6 +46,7 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
     modelDef: ModelDef | undefined,
     readonly eventStream?: EventStream
   ) {
+    process.stdout.write('\n>>> QueryModelImpl constructor called <<<\n');
     if (modelDef) {
       this.loadModelFromDef(modelDef);
     }
@@ -130,6 +131,55 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
     isJoinedSubquery = false
   ): QueryResults {
     const malloy = '';
+
+    const stack =
+      new Error().stack
+        ?.split('\n')
+        .slice(1, 6)
+        .map(s => s.trim())
+        .join(' -> ') || 'no stack';
+    const calledFrom = stack.includes('getFinalOutputStruct')
+      ? 'MODEL_LOADING'
+      : stack.includes('compileQuery')
+      ? 'QUERY_COMPILATION'
+      : stack.includes('getPreparedResult')
+      ? 'QUERY_EXECUTION'
+      : 'UNKNOWN';
+    console.log(`[QueryModelImpl.loadQuery] CALLED FROM: ${calledFrom}`, {
+      isJoinedSubquery,
+      hasArgs:
+        !!query.sourceArguments &&
+        Object.keys(query.sourceArguments).length > 0,
+    });
+
+    console.log('[QueryModelImpl.loadQuery] query object:', {
+      hasStructRef: !!query.structRef,
+      structRefType: typeof query.structRef,
+      structRefName:
+        typeof query.structRef === 'string'
+          ? query.structRef
+          : (query.structRef as any)?.name,
+      hasSourceArguments: !!query.sourceArguments,
+      sourceArgumentsType: typeof query.sourceArguments,
+      sourceArgumentsKeys: query.sourceArguments
+        ? Object.keys(query.sourceArguments)
+        : [],
+      sourceArgumentsStringified: JSON.stringify(query.sourceArguments),
+      structRefIsObject: typeof query.structRef !== 'string',
+      structRefHasArguments:
+        typeof query.structRef !== 'string' &&
+        !!(query.structRef as any)?.arguments,
+      structRefArgumentsKeys:
+        typeof query.structRef !== 'string' &&
+        (query.structRef as any)?.arguments
+          ? Object.keys((query.structRef as any).arguments)
+          : [],
+      structRefArgumentsStringified:
+        typeof query.structRef !== 'string' &&
+        (query.structRef as any)?.arguments
+          ? JSON.stringify((query.structRef as any).arguments)
+          : 'none',
+    });
 
     const structRef = query.compositeResolvedSourceDef ?? query.structRef;
     const queryStruct = this.getStructFromRef(
@@ -223,6 +273,21 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
     prepareResultOptions?: PrepareResultOptions,
     finalize = true
   ): CompiledQuery {
+    process.stdout.write(
+      `\n>>> [compileQuery] CALLED! hasSourceArguments=${!!query.sourceArguments}, keys=${
+        query.sourceArguments
+          ? Object.keys(query.sourceArguments).join(',')
+          : 'none'
+      } <<<\n`
+    );
+    console.log('[compileQuery] Called with query:', {
+      hasSourceArguments: !!query.sourceArguments,
+      sourceArgumentsKeys: query.sourceArguments
+        ? Object.keys(query.sourceArguments)
+        : [],
+      sourceArgumentsStringified: JSON.stringify(query.sourceArguments || {}),
+    });
+
     let newModel: QueryModel | undefined;
     const addDefaultRowLimit = this.addDefaultRowLimit(
       query,

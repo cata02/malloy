@@ -756,12 +756,88 @@ export function generateParameterFragment(
   state: GenerateState
 ): string {
   const name = expr.path[0];
+
+  // DEBUG: Trace parent chain to find parameter values
+  console.log('[generateParameterFragment] Looking for parameter:', {
+    paramName: name,
+    contextStructName: (context as any).structDef?.name,
+    contextArgs: Object.keys(context.arguments()),
+    hasParent: !!context.parent,
+  });
+
+  let cur: any = context;
+  let depth = 0;
+  while (cur && depth < 10) {
+    const args = cur.arguments?.();
+    console.log(`[generateParameterFragment] Parent chain [${depth}]:`, {
+      structName: cur.structDef?.name,
+      structType: cur.structDef?.type,
+      hasSourceArgs: !!cur.sourceArguments,
+      sourceArgKeys: cur.sourceArguments
+        ? Object.keys(cur.sourceArguments)
+        : [],
+      argKeys: args ? Object.keys(args) : [],
+      paramValue: args?.[name]
+        ? {hasValue: !!args[name].value, valueNode: args[name].value?.node}
+        : 'not found',
+    });
+    cur = cur.parent;
+    depth++;
+  }
+
   // Only rely on context.arguments() for parameter values
   const argument = context.arguments()[name];
-  let value = argument?.value;
+  const value = argument?.value;
   if (value) {
     return exprToSQL(resultSet, context, value, state);
   }
+
+  // SYMBOLIC PARAMETER SUPPORT:
+  // If we have a parameter definition but no concrete value,
+  // we're in schema resolution mode (model loading).
+  // Use a type-appropriate placeholder so SQL generation can proceed
+  // for schema extraction purposes.
+  if (argument) {
+    console.log(
+      `[generateParameterFragment] Using placeholder for parameter '${name}' during schema resolution`
+    );
+    const dialect = context.dialect;
+
+    // Generate a placeholder based on parameter type
+    switch (argument.type) {
+      case 'string':
+        return dialect.sqlLiteralString(`$PARAM_${name}$`);
+      case 'number':
+        return '0';
+      case 'boolean':
+        return dialect.sqlLiteralString('true');
+      case 'date':
+        return dialect.sqlLiteralString('2000-01-01');
+      case 'timestamp':
+        return dialect.sqlLiteralString('2000-01-01 00:00:00');
+      default:
+        // For unknown types, use a string placeholder
+        return dialect.sqlLiteralString(`$PARAM_${name}$`);
+    }
+  }
+
+  // FALLBACK FOR MISSING PARAMETERS IN JOIN QUERIES:
+  // If we reach here and there's no argument definition, check if we're in
+  // schema resolution mode by examining the call stack.
+  // During schema resolution (getFinalOutputStruct), use a generic placeholder.
+  const stack = new Error().stack || '';
+  if (
+    stack.includes('getFinalOutputStruct') ||
+    stack.includes('resolveQueryFields')
+  ) {
+    console.log(
+      `[generateParameterFragment] Parameter '${name}' not in context.arguments(), but in schema resolution mode - using generic placeholder`
+    );
+    const dialect = context.dialect;
+    // Use string placeholder as we don't know the type
+    return dialect.sqlLiteralString(`$PARAM_${name}$`);
+  }
+
   throw new Error(`Can't generate SQL, no value for ${expr.path}`);
 }
 

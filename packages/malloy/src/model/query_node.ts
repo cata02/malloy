@@ -72,9 +72,69 @@ export class QueryField extends QueryNode {
 
   getJoinableParent(): QueryStruct {
     const parent = this.parent;
+    const stack =
+      new Error().stack?.split('\n').slice(1, 6).join('\n      ') || 'no stack';
+
+    console.log('\n  ┌─── [getJoinableParent] Called ───┐');
+    console.log('  │ Field info:', {
+      fieldName: this.fieldDef.name,
+      fieldType: this.fieldDef.type,
+      parentDefType: parent.structDef.type,
+      parentDefName: parent.structDef.name,
+    });
+    console.log('  │ Call stack:', stack);
+
+    // Log full parent chain
+    console.log('  │ Full parent chain:');
+    let cur: any = parent;
+    let depth = 0;
+    while (cur && depth < 10) {
+      console.log(
+        `  │   [${depth}] ${cur.structDef.type}:${
+          cur.structDef.name
+        }, hasParent: ${!!cur.parent}`
+      );
+      cur = cur.parent;
+      depth++;
+    }
+
+    // Skip record parents
     if (parent.structDef.type === 'record') {
+      console.log('  │ ↻ SKIPPING record parent, recursing...');
       return parent.getJoinableParent();
     }
+
+    // FIX: Skip query_source parents to avoid self-references
+    // When a field's parent is a query_source (e.g., a join with a pipeline),
+    // we don't want to add that query_source as a join to itself.
+    // Instead, traverse up to find a proper joinable parent.
+    if (parent.structDef.type === 'query_source') {
+      console.log(
+        '  │ ⚠️  SKIPPING query_source parent to avoid self-reference:',
+        parent.structDef.name
+      );
+      if (parent.parent) {
+        console.log('  │ ↻ Has grandparent, recursing to get it...');
+        const result = parent.getJoinableParent();
+        console.log('  │ ✓ Returning grandparent:', result.structDef.name);
+        console.log('  └──────────────────────────────────┘\n');
+        return result;
+      }
+      console.log(
+        "  │ ⚠️  No grandparent! Returning query_source anyway (shouldn't happen)"
+      );
+      // If no grandparent, return the query_source's parent anyway
+      // (this shouldn't happen in normal cases)
+    }
+
+    console.log('  │ ✓ Returning parent:', {
+      returnDefType: parent.structDef.type,
+      returnDefName: parent.structDef.name,
+      returnHasParent: !!parent.parent,
+      returnParentName: parent.parent?.structDef?.name,
+    });
+    console.log('  └──────────────────────────────────┘\n');
+
     return parent;
   }
 
@@ -159,6 +219,44 @@ export class QueryFieldStruct extends QueryField {
   ) {
     super(jfd, parent, referenceId);
     this.fieldDef = jfd;
+
+    // DEBUG: Check if join field has arguments
+    const jfdArgs = (jfd as any).arguments;
+    console.log('[QueryFieldStruct constructor] Join field arguments check:', {
+      fieldName: jfd.name,
+      fieldType: jfd.type,
+      jfdHasArguments: !!jfdArgs,
+      jfdArguments: jfdArgs ? Object.keys(jfdArgs) : [],
+      jfdArgumentValues: jfdArgs
+        ? Object.fromEntries(
+            Object.entries(jfdArgs).map(([k, v]: [string, any]) => [
+              k,
+              {
+                hasValue: !!v.value,
+                valueNode: v.value?.node,
+                valueType: typeof v.value,
+              },
+            ])
+          )
+        : {},
+      sourceArguments: sourceArguments ? Object.keys(sourceArguments) : [],
+      sourceArgumentValues: sourceArguments
+        ? Object.fromEntries(
+            Object.entries(sourceArguments).map(([k, v]: [string, any]) => [
+              k,
+              {
+                hasValue: !!v.value,
+                valueNode: v.value?.node,
+                valueType: typeof v.value,
+              },
+            ])
+          )
+        : {},
+      parentSourceArguments: parent.sourceArguments
+        ? Object.keys(parent.sourceArguments)
+        : [],
+    });
+
     if (process.env['MALLOY_DEBUG_ARGS']) {
       // eslint-disable-next-line no-console
       console.log('[malloy debug] QueryFieldStruct constructor', {
@@ -171,12 +269,52 @@ export class QueryFieldStruct extends QueryField {
         ),
       });
     }
+
+    // Use parent.arguments() which resolves through parent chain and includes runtime values
+    // This ensures join pipelines get access to runtime parameter values from the run: statement
+    const finalSourceArguments = sourceArguments ?? parent.arguments();
+    console.log('[QueryFieldStruct constructor] Using arguments:', {
+      source: sourceArguments ? 'sourceArguments' : 'parent.arguments()',
+      keys: finalSourceArguments ? Object.keys(finalSourceArguments) : [],
+      values: finalSourceArguments
+        ? Object.fromEntries(
+            Object.entries(finalSourceArguments).map(
+              ([k, v]: [string, any]) => [
+                k,
+                {hasValue: !!v.value, valueNode: v.value?.node},
+              ]
+            )
+          )
+        : {},
+      parentHasArguments: !!parent.sourceArguments,
+      parentArgKeys: parent.sourceArguments
+        ? Object.keys(parent.sourceArguments)
+        : [],
+    });
+
+    console.log(
+      '[QueryFieldStruct constructor] Creating QueryStruct for join:',
+      {
+        jfdName: jfd.name,
+        jfdType: jfd.type,
+        hasQuery: !!(jfd as any).query,
+        parentName: parent.structDef.name,
+        parentType: parent.structDef.type,
+      }
+    );
+
     this.queryStruct = new QueryStruct(
       jfd,
-      sourceArguments ?? parent.sourceArguments,
+      finalSourceArguments,
       {struct: parent},
       prepareResultOptions
     );
+
+    console.log('[QueryFieldStruct constructor] Created QueryStruct:', {
+      queryStructDefType: this.queryStruct.structDef.type,
+      queryStructHasParent: !!this.queryStruct.parent,
+      queryStructParentName: this.queryStruct.parent?.structDef.name,
+    });
   }
 
   /*
@@ -305,6 +443,16 @@ export class QueryStruct {
     parent: ParentQueryStruct | ParentQueryModel,
     readonly prepareResultOptions: PrepareResultOptions
   ) {
+    console.log('[QueryStruct constructor] Creating:', {
+      structType: structDef.type,
+      structName: structDef.name,
+      parentHasStruct: 'struct' in parent,
+      parentHasModel: 'model' in parent,
+      parentStructType:
+        'struct' in parent ? parent.struct?.structDef?.type : undefined,
+      sourceArgKeys: sourceArguments ? Object.keys(sourceArguments) : [],
+    });
+
     if (process.env['MALLOY_DEBUG_ARGS']) {
       // eslint-disable-next-line no-console
       console.log('[malloy debug] QueryStruct constructor', {
@@ -868,6 +1016,22 @@ export class QueryStruct {
     ) => SourceDef | undefined
   ) {
     if (this.structDef.type === 'query_source' && finalOutputStruct) {
+      console.log('[resolveQueryFields] Processing query_source:', {
+        sourceName: this.structDef.name,
+        hasParameters: !!this.structDef.parameters,
+        parameterKeys: this.structDef.parameters
+          ? Object.keys(this.structDef.parameters)
+          : [],
+        hasArguments: !!this.structDef.arguments,
+        argumentKeys: this.structDef.arguments
+          ? Object.keys(this.structDef.arguments)
+          : [],
+        queryHasSourceArgs: !!this.structDef.query.sourceArguments,
+        querySourceArgKeys: this.structDef.query.sourceArguments
+          ? Object.keys(this.structDef.query.sourceArguments)
+          : [],
+      });
+
       const resultStruct = finalOutputStruct(
         this.structDef.query,
         this.prepareResultOptions
@@ -916,8 +1080,23 @@ export class QueryStruct {
   }
 
   setParent(parent: ParentQueryStruct | ParentQueryModel) {
+    console.log('[QueryStruct.setParent] Called for:', {
+      thisStructType: this.structDef.type,
+      thisStructName: this.structDef.name,
+      parentHasStruct: 'struct' in parent,
+      parentHasModel: 'model' in parent,
+      parentStructType:
+        'struct' in parent ? parent.struct.structDef.type : undefined,
+      parentStructName:
+        'struct' in parent ? parent.struct.structDef.name : undefined,
+    });
+
     if ('struct' in parent) {
       this.parent = parent.struct;
+      console.log('[QueryStruct.setParent] Set this.parent to:', {
+        parentType: this.parent.structDef.type,
+        parentName: this.parent.structDef.name,
+      });
     }
     if ('model' in parent) {
       this.model = parent.model;
@@ -1001,7 +1180,18 @@ export class QueryStruct {
   }
 
   getChildByName(name: string): QueryField | undefined {
-    return this.nameMap.get(name);
+    const result = this.nameMap.get(name);
+    if (result && result instanceof QueryFieldStruct) {
+      console.log('[QueryStruct.getChildByName] Returning QueryFieldStruct:', {
+        name,
+        thisStructDefType: this.structDef.type,
+        thisStructDefName: this.structDef.name,
+        resultFieldDefType: result.fieldDef.type,
+        resultQueryStructDefType: result.queryStruct.structDef.type,
+        resultQueryStructHasParent: !!result.queryStruct.parent,
+      });
+    }
+    return result;
   }
 
   /** convert a path into a field reference */

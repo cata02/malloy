@@ -22,6 +22,15 @@ export class JoinInstance {
     public alias: string,
     public parent: JoinInstance | undefined
   ) {
+    console.log('[JoinInstance constructor] Creating join instance:', {
+      alias,
+      qsDefType: queryStruct.structDef.type,
+      qsDefName: queryStruct.structDef.name,
+      qsHasParent: !!queryStruct.parent,
+      qsParentName: queryStruct.parent?.structDef?.name,
+      qsParentType: queryStruct.parent?.structDef?.type,
+    });
+
     if (parent) {
       parent.children.push(this);
     }

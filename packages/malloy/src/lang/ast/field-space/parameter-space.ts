@@ -26,6 +26,10 @@ export class ParameterSpace implements FieldSpace {
     for (const parameter of parameters) {
       this._map[parameter.name] = new AbstractParameter(parameter);
     }
+    console.log(
+      '[ParameterSpace constructor] Created with parameters:',
+      Object.keys(this._map)
+    );
   }
 
   structDef(): StructDef {
@@ -37,6 +41,12 @@ export class ParameterSpace implements FieldSpace {
   }
 
   entry(name: string): SpaceEntry | undefined {
+    console.log(
+      `[ParameterSpace.entry] Looking up '${name}', available:`,
+      Object.keys(this._map),
+      'found:',
+      !!this._map[name]
+    );
     return this._map[name];
   }
 

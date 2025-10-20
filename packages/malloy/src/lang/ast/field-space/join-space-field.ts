@@ -33,17 +33,29 @@ export class JoinSpaceField extends StructSpaceField {
     forConnection: string
   ) {
     super(join.getStructDef(parameterSpace), forDialect, forConnection);
+    console.log(
+      `[JoinSpaceField constructor] Created for join with parameterSpace:`,
+      !!parameterSpace
+    );
   }
 
   get fieldSpace() {
+    console.log(
+      `[JoinSpaceField.fieldSpace] Getting fieldSpace, has parameterSpace:`,
+      !!this.parameterSpace
+    );
     const base = super.fieldSpace;
     if (base instanceof StaticSourceSpace) {
+      console.log(
+        `[JoinSpaceField.fieldSpace] Wrapping StaticSourceSpace with parameterSpace`
+      );
       return new StaticSourceSpace(
         base.structDef(),
         base.accessProtectionLevel(),
         this.parameterSpace
       );
     }
+    console.log(`[JoinSpaceField.fieldSpace] Not wrapping, returning base`);
     return base;
   }
 }

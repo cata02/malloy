@@ -96,8 +96,23 @@ export class StaticSpace implements FieldSpace {
   private get map(): FieldMap {
     if (this.memoMap === undefined) {
       this.memoMap = {};
+      const spaceName = isSourceDef(this.fromStruct)
+        ? this.fromStruct.name
+        : 'struct';
+      console.log(
+        `[StaticSpace.map] Building map for '${spaceName}', is StaticSourceSpace: ${
+          this instanceof StaticSourceSpace
+        }, has parameterSpaceRef: ${
+          this instanceof StaticSourceSpace
+            ? !!(this as StaticSourceSpace).parameterSpaceRef
+            : 'N/A'
+        }`
+      );
       for (const f of this.fromStruct.fields) {
         const name = f.as || f.name;
+        console.log(
+          `[StaticSpace.map] Adding field '${name}', isJoined: ${isJoined(f)}`
+        );
         this.memoMap[name] = this.defToSpaceField(f);
       }
       if (isSourceDef(this.fromStruct)) {
@@ -157,8 +172,11 @@ export class StaticSpace implements FieldSpace {
     accessLevel ??= this.accessProtectionLevel();
     const head = path[0];
     const rest = path.slice(1);
-    let found = this.entry(head.refString);
+    const headName = head.refString;
+    console.log(`[StaticSpace.lookup] Looking up '${headName}'`);
+    let found = this.entry(headName);
     if (!found) {
+      console.log(`[StaticSpace.lookup] NOT FOUND: '${headName}'`);
       return {
         error: {
           message: `'${head}' is not defined`,
@@ -167,6 +185,7 @@ export class StaticSpace implements FieldSpace {
         found,
       };
     }
+    console.log(`[StaticSpace.lookup] Found '${headName}'`);
     if (found instanceof SpaceField) {
       const definition = found.fieldDef();
       if (definition) {
@@ -249,14 +268,27 @@ export class StructSpaceField extends StructSpaceFieldBase {
   constructor(
     def: JoinFieldDef,
     private forDialect: string,
-    private forConnection: string
+    private forConnection: string,
+    private parameterSpaceRef?: import('./parameter-space').ParameterSpace
   ) {
     super(def);
   }
 
   get fieldSpace(): FieldSpace {
-    if (isSourceDef(this.structDef)) {
-      return new StaticSourceSpace(this.structDef, 'internal');
+    const isSource = isSourceDef(this.structDef);
+    console.log(
+      `[StructSpaceField.fieldSpace] Join '${
+        this.structDef.name
+      }', isSourceDef: ${isSource}, type: ${
+        this.structDef.type
+      }, has parameterSpaceRef: ${!!this.parameterSpaceRef}`
+    );
+    if (isSource) {
+      return new StaticSourceSpace(
+        this.structDef as SourceDef,
+        'internal',
+        this.parameterSpaceRef
+      );
     } else {
       return new StaticSpace(
         this.structDef,
@@ -274,6 +306,12 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     readonly parameterSpaceRef?: ParameterSpace
   ) {
     super(source, source.dialect, source.connection);
+    console.log(
+      '[StaticSourceSpace constructor] Created with parameterSpaceRef:',
+      !!parameterSpaceRef,
+      'source name:',
+      source.name
+    );
   }
   structDef(): SourceDef {
     return this.source;
@@ -287,6 +325,155 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
 
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
+  }
+
+  // Override defToSpaceField to pass parameterSpaceRef to joins
+  override defToSpaceField(from: FieldDef): SpaceField {
+    console.log(
+      `[StaticSourceSpace.defToSpaceField] Field '${
+        from.name
+      }', isJoined: ${isJoined(from)}, has parameterSpaceRef: ${!!this
+        .parameterSpaceRef}`
+    );
+
+    if (isJoined(from)) {
+      console.log(
+        '[StaticSourceSpace.defToSpaceField] Creating StructSpaceField with parameterSpaceRef'
+      );
+      return new StructSpaceField(
+        from,
+        this.structDialect,
+        this.structConnection,
+        this.parameterSpaceRef
+      );
+    }
+    return super.defToSpaceField(from);
+  }
+
+  // Override entry() to also check the parameterSpace
+  override entry(name: string): SpaceEntry | undefined {
+    console.log(
+      `[StaticSourceSpace.entry] Looking up '${name}', has parameterSpaceRef:`,
+      !!this.parameterSpaceRef
+    );
+    // First check the regular fields
+    const fieldEntry = super.entry(name);
+    if (fieldEntry) {
+      console.log(`[StaticSourceSpace.entry] Found '${name}' in fields`);
+      return fieldEntry;
+    }
+    // If not found in fields, check the parameter space
+    if (this.parameterSpaceRef) {
+      console.log(
+        `[StaticSourceSpace.entry] Checking parameterSpace for '${name}'`
+      );
+      return this.parameterSpaceRef.entry(name);
+    }
+    console.log(`[StaticSourceSpace.entry] '${name}' not found anywhere`);
+    return undefined;
+  }
+
+  // Override lookup() to pass parameterSpaceRef when creating StructSpaceField on-the-fly
+  // NOTE: This method duplicates the base class implementation to inject parameterSpaceRef
+  // at line 412 when creating StructSpaceField for computed joins. The base class creates
+  // these inline with no hook to override just that part. If the base implementation changes,
+  // this override must be updated accordingly.
+  override lookup(
+    path: FieldName[],
+    accessLevel?: AccessModifierLabel
+  ): LookupResult {
+    accessLevel ??= this.accessProtectionLevel();
+    const head = path[0];
+    const rest = path.slice(1);
+    const headName = head.refString;
+    console.log(`[StaticSourceSpace.lookup] Looking up '${headName}'`);
+    let found = this.entry(headName);
+    if (!found) {
+      console.log(`[StaticSourceSpace.lookup] NOT FOUND: '${headName}'`);
+      return {
+        error: {
+          message: `'${head}' is not defined`,
+          code: 'field-not-found',
+        },
+        found,
+      };
+    }
+    console.log(`[StaticSourceSpace.lookup] Found '${headName}'`);
+    if (found instanceof SpaceField) {
+      const definition = found.fieldDef();
+      if (definition) {
+        if (!(found instanceof StructSpaceFieldBase) && isJoined(definition)) {
+          // We have looked up a field which is a join, but not a StructSpaceField
+          // because it is someting like "dimension: joinedArray is arrayComputation"
+          // which wasn't known to be a join when the fieldspace was constructed.
+          // Pass the parameterSpaceRef to ensure parameters are accessible in the join
+          console.log(
+            '[StaticSourceSpace.lookup] Creating StructSpaceField on-the-fly with parameterSpaceRef'
+          );
+          found = new StructSpaceField(
+            definition,
+            this.structDialect,
+            this.structConnection,
+            this.parameterSpaceRef
+          );
+        }
+        // cswenson review todo I don't know how to count the reference properly now
+        // i tried only writing it as a join reference if there was more in the path
+        // but that failed because lookup([JOINNAME]) is called when translating JOINNAME.AGGREGATE(...)
+        // with a 1-length-path but that IS a join reference and there is a test
+        head.addReference({
+          type:
+            found instanceof StructSpaceFieldBase
+              ? 'joinReference'
+              : 'fieldReference',
+          definition,
+          location: head.location,
+          text: head.refString,
+        });
+      }
+      if (definition?.accessModifier) {
+        if (!accessAllowed(accessLevel, definition.accessModifier)) {
+          return {
+            error: {
+              message: `'${head}' is ${definition?.accessModifier}`,
+              code: 'field-not-accessible',
+            },
+            found: undefined,
+          };
+        }
+      }
+    } // cswenson review todo { else this is SpaceEntry not a field which can only be a param and what is going on? }
+    const joinPath =
+      found instanceof StructSpaceFieldBase
+        ? [{...found.joinPathElement, name: head.refString}]
+        : [];
+    if (rest.length) {
+      if (found instanceof StructSpaceFieldBase) {
+        const restResult = found.fieldSpace.lookup(
+          rest,
+          lessPermissiveAccessLevel(
+            accessLevel,
+            found.fieldSpace.accessProtectionLevel()
+          )
+        );
+        if (restResult.found) {
+          return {
+            ...restResult,
+            joinPath: [...joinPath, ...restResult.joinPath],
+          };
+        } else {
+          return restResult;
+        }
+      }
+      return {
+        error: {
+          message: `'${head}' cannot contain a '${rest[0]}'`,
+          code: 'invalid-property-access-in-field-reference',
+        },
+        found: undefined,
+      };
+    }
+    return {found, error: undefined, joinPath, isOutputField: false};
   }
 
   parameterSpace(): ParameterSpace {

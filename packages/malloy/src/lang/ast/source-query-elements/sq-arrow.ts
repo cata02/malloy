@@ -21,12 +21,14 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import type {Source} from '../source-elements/source';
+import {Source} from '../source-elements/source';
 import {SourceQueryElement} from './source-query-element';
 import {QuerySource} from '../source-elements/query-source';
 import {QueryArrow} from '../query-elements/query-arrow';
 import type {View} from '../view-elements/view';
 import type {QueryElement} from '../types/query-element';
+import {HasParameter} from '../parameters/has-parameter';
+import {ParameterSpace} from '../field-space/parameter-space';
 
 /**
  * An expression that adds a segment to a source or query.
@@ -48,6 +50,7 @@ export class SQArrow extends SourceQueryElement {
   }
 
   getQuery(): QueryElement | undefined {
+    console.log('[SQArrow.getQuery] Called');
     const lhs = this.applyTo.isSource()
       ? this.applyTo.getSource()
       : this.applyTo.getQuery();
@@ -58,7 +61,53 @@ export class SQArrow extends SourceQueryElement {
       );
       return;
     }
-    const arr = new QueryArrow(lhs, this.operation);
+
+    // Extract parameter space from source arguments if available
+    // This ensures parameters are accessible in the query (e.g., in join pipelines)
+    let parameterSpace: ParameterSpace | undefined;
+    const sourceType =
+      lhs instanceof Source
+        ? (lhs as any).elementType || lhs.constructor.name
+        : 'QueryElement';
+    console.log(
+      `[SQArrow.getQuery] LHS is: ${sourceType}, instanceof Source: ${
+        lhs instanceof Source
+      }`
+    );
+    if (lhs instanceof Source) {
+      // Get the source def to extract arguments
+      const sourceDef = lhs.getSourceDef(undefined);
+      console.log(
+        `[SQArrow.getQuery] sourceDef.parameters:`,
+        sourceDef.parameters ? Object.keys(sourceDef.parameters) : 'none'
+      );
+      console.log(
+        `[SQArrow.getQuery] sourceDef.arguments:`,
+        sourceDef.arguments ? Object.keys(sourceDef.arguments) : 'none'
+      );
+      // Use arguments instead of parameters - arguments contain the actual parameter values
+      if (sourceDef.arguments && Object.keys(sourceDef.arguments).length > 0) {
+        // Convert Argument objects to HasParameter objects to create ParameterSpace
+        const paramList: HasParameter[] = [];
+        for (const [paramName, arg] of Object.entries(sourceDef.arguments)) {
+          // Extract the ParameterTypeDef part (without the 'name' and 'value' fields)
+          const {name: _name, value: _value, ...typeDef} = arg;
+          paramList.push(
+            new HasParameter({
+              name: paramName,
+              typeDef,
+            })
+          );
+        }
+        parameterSpace = new ParameterSpace(paramList);
+        console.log(
+          '[SQArrow.getQuery] Created parameterSpace from source arguments:',
+          Object.keys(sourceDef.arguments)
+        );
+      }
+    }
+
+    const arr = new QueryArrow(lhs, this.operation, parameterSpace);
     this.has({query: arr});
     return arr;
   }

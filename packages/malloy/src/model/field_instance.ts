@@ -461,9 +461,31 @@ export class FieldInstanceResult implements FieldInstance {
     uniqueKeyRequirement: UniqueKeyRequirement
   ): void {
     const name = qs.getIdentifier();
+    const stack =
+      new Error().stack?.split('\n').slice(1, 8).join('\n    ') || 'no stack';
+
+    console.log(
+      '\n┌─────────────────────────────────────────────────────────┐'
+    );
+    console.log(`│  [addStructToJoin] Called for: ${name.padEnd(25)} │`);
+    console.log('└─────────────────────────────────────────────────────────┘');
+    console.log('[addStructToJoin] QueryStruct details:', {
+      name,
+      qsDefType: qs.structDef.type,
+      qsDefName: qs.structDef.name,
+      qsHasParent: !!qs.parent,
+      qsParentType: qs.parent?.structDef?.type,
+      qsParentName: qs.parent?.structDef?.name,
+      qsSourceArgs: qs.sourceArguments ? Object.keys(qs.sourceArguments) : [],
+      currentJoinsInMap: Array.from(this.root().joins.keys()),
+    });
+    console.log('[addStructToJoin] Call stack:', stack);
 
     let join = this.root().joins.get(name);
     if (join) {
+      console.log(
+        '[addStructToJoin] ✓ Join ALREADY EXISTS, updating uniqueKeyRequirement'
+      );
       join.uniqueKeyRequirement = mergeUniqueKeyRequirement(
         join.uniqueKeyRequirement,
         uniqueKeyRequirement
@@ -471,19 +493,82 @@ export class FieldInstanceResult implements FieldInstance {
       return;
     }
 
+    console.log(
+      '[addStructToJoin] Join does NOT exist yet, checking for parent...'
+    );
     // if we have a parent, join it first.
     let parent: JoinInstance | undefined;
     const parentStruct = qs.parent?.getJoinableParent();
+
+    console.log('[addStructToJoin] Parent analysis:', {
+      hasQsParent: !!qs.parent,
+      qsParentType: qs.parent?.structDef?.type,
+      qsParentName: qs.parent?.structDef?.name,
+      calledGetJoinableParent: !!parentStruct,
+      parentStructType: parentStruct?.structDef?.type,
+      parentStructName: parentStruct?.structDef?.name,
+      parentStructIdentifier: parentStruct?.getIdentifier(),
+    });
+
     if (parentStruct) {
-      // add dependant expressions first...
-      this.addStructToJoin(parentStruct, undefined);
-      parent = this.root().joins.get(parentStruct.getIdentifier());
+      // Check for self-reference BEFORE recursive call
+      const parentIdentifier = parentStruct.getIdentifier();
+      if (parentIdentifier === name) {
+        console.error('\n🔥🔥🔥 RECURSIVE SELF-REFERENCE DETECTED! 🔥🔥🔥');
+        console.error('[addStructToJoin] WOULD RECURSE INTO SELF!', {
+          currentName: name,
+          parentIdentifier,
+          currentType: qs.structDef.type,
+          parentType: parentStruct.structDef.type,
+          THIS_WOULD_CAUSE_INFINITE_LOOP: true,
+        });
+        console.error('[addStructToJoin] QueryStruct parent chain:');
+        let cur: any = qs.parent;
+        let depth = 0;
+        while (cur && depth < 10) {
+          console.error(
+            `  [${depth}] type=${cur.structDef.type}, name=${
+              cur.structDef.name
+            }, id=${cur.getIdentifier?.()}`
+          );
+          cur = cur.parent;
+          depth++;
+        }
+        // Don't recurse - this would cause infinite loop!
+        console.error(
+          '[addStructToJoin] SKIPPING parent join to avoid infinite loop\n'
+        );
+      } else {
+        console.log(
+          `[addStructToJoin] Recursively adding parent struct: ${parentIdentifier}`
+        );
+        // add dependant expressions first...
+        this.addStructToJoin(parentStruct, undefined);
+        parent = this.root().joins.get(parentStruct.getIdentifier());
+        console.log(
+          `[addStructToJoin] After recursive call, parent JoinInstance: ${
+            parent ? 'found' : 'NOT FOUND'
+          }`
+        );
+      }
+    } else {
+      console.log('[addStructToJoin] No parent struct, this is a root join');
     }
 
     if (!(join = this.root().joins.get(name))) {
+      console.log(
+        `[addStructToJoin] Creating NEW JoinInstance for ${name} with parent: ${
+          parent ? parent.alias : 'none'
+        }`
+      );
       join = new JoinInstance(qs, name, parent);
       this.root().joins.set(name, join);
+      console.log('[addStructToJoin] ✓ JoinInstance created and added to map');
+    } else {
+      console.log('[addStructToJoin] Join was created by recursive call');
     }
+
+    console.log(`[addStructToJoin] COMPLETE for ${name}\n`);
     join.uniqueKeyRequirement = mergeUniqueKeyRequirement(
       join.uniqueKeyRequirement,
       uniqueKeyRequirement

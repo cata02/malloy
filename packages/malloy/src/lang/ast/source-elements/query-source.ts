@@ -53,8 +53,25 @@ export class QuerySource extends Source {
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
   ): SourceDef {
+    // DEBUG: Log parameter space info
+    if (parameterSpace) {
+      const paramNames = Array.from(parameterSpace.entries()).map(
+        ([name]) => name
+      );
+      console.log(
+        '[QuerySource.withParameters] Received parameterSpace with params:',
+        paramNames
+      );
+    } else {
+      console.log('[QuerySource.withParameters] No parameterSpace provided');
+    }
+
     // Pass parameter space to supported query elements
     assignParameterSpace(this.query, parameterSpace);
+    console.log(
+      '[QuerySource.withParameters] Assigned parameterSpace to query element'
+    );
+
     const comp = this.query.queryComp(false);
     const queryStruct: QuerySourceDef = {
       ...comp.outputStruct,

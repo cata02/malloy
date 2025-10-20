@@ -36,6 +36,7 @@ import type {QueryFieldSpace} from '../types/field-space';
 import type {QueryOperationSpace} from './query-spaces';
 import {RefinedSpace} from './refined-space';
 import type {ParameterSpace} from '../field-space/parameter-space';
+import type {SpaceEntry} from '../types/space-entry';
 
 export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   extendList: string[] = [];
@@ -80,11 +81,53 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   }
 
   parameterSpace(): ParameterSpace {
+    console.log('[QueryInputSpace.parameterSpace] Called');
     const provided = this.queryOutput.parameterSpace?.();
     if (provided) {
+      const paramNames = Array.from(provided.entries()).map(([name]) => name);
+      console.log(
+        '[QueryInputSpace.parameterSpace] Got from queryOutput:',
+        paramNames
+      );
       return provided;
     }
-    return super.parameterSpace();
+    console.log('[QueryInputSpace.parameterSpace] Falling back to super');
+    const superParam = super.parameterSpace();
+    const superParamNames = Array.from(superParam.entries()).map(
+      ([name]) => name
+    );
+    console.log(
+      '[QueryInputSpace.parameterSpace] Super returned:',
+      superParamNames
+    );
+    return superParam;
+  }
+
+  // Override entry() to also check the parameterSpace
+  override entry(name: string): SpaceEntry | undefined {
+    console.log(`[QueryInputSpace.entry] Looking up '${name}'`);
+    // First check the regular fields
+    const fieldEntry = super.entry(name);
+    if (fieldEntry) {
+      console.log(`[QueryInputSpace.entry] Found '${name}' in fields`);
+      return fieldEntry;
+    }
+    // If not found in fields, check the parameter space
+    const paramSpace = this.parameterSpace();
+    if (paramSpace) {
+      console.log(
+        `[QueryInputSpace.entry] Checking parameterSpace for '${name}'`
+      );
+      const paramEntry = paramSpace.entry(name);
+      if (paramEntry) {
+        console.log(
+          `[QueryInputSpace.entry] Found '${name}' in parameterSpace`
+        );
+        return paramEntry;
+      }
+    }
+    console.log(`[QueryInputSpace.entry] '${name}' not found anywhere`);
+    return undefined;
   }
 
   isQueryOutputSpace() {
