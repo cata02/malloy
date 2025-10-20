@@ -62,9 +62,8 @@ export class SQArrow extends SourceQueryElement {
       return;
     }
 
-    // Extract parameter space from source arguments if available
-    // This ensures parameters are accessible in the query (e.g., in join pipelines)
-    let parameterSpace: ParameterSpace | undefined;
+    // Don't extract parameter space here - let QueryArrow compile the source later
+    // when it has the full parameter context (including outer source parameters in joins)
     const sourceType =
       lhs instanceof Source
         ? (lhs as any).elementType || lhs.constructor.name
@@ -72,42 +71,12 @@ export class SQArrow extends SourceQueryElement {
     console.log(
       `[SQArrow.getQuery] LHS is: ${sourceType}, instanceof Source: ${
         lhs instanceof Source
-      }`
+      }, deferring parameter extraction to QueryArrow`
     );
-    if (lhs instanceof Source) {
-      // Get the source def to extract arguments
-      const sourceDef = lhs.getSourceDef(undefined);
-      console.log(
-        `[SQArrow.getQuery] sourceDef.parameters:`,
-        sourceDef.parameters ? Object.keys(sourceDef.parameters) : 'none'
-      );
-      console.log(
-        `[SQArrow.getQuery] sourceDef.arguments:`,
-        sourceDef.arguments ? Object.keys(sourceDef.arguments) : 'none'
-      );
-      // Use arguments instead of parameters - arguments contain the actual parameter values
-      if (sourceDef.arguments && Object.keys(sourceDef.arguments).length > 0) {
-        // Convert Argument objects to HasParameter objects to create ParameterSpace
-        const paramList: HasParameter[] = [];
-        for (const [paramName, arg] of Object.entries(sourceDef.arguments)) {
-          // Extract the ParameterTypeDef part (without the 'name' and 'value' fields)
-          const {name: _name, value: _value, ...typeDef} = arg;
-          paramList.push(
-            new HasParameter({
-              name: paramName,
-              typeDef,
-            })
-          );
-        }
-        parameterSpace = new ParameterSpace(paramList);
-        console.log(
-          '[SQArrow.getQuery] Created parameterSpace from source arguments:',
-          Object.keys(sourceDef.arguments)
-        );
-      }
-    }
 
-    const arr = new QueryArrow(lhs, this.operation, parameterSpace);
+    // Create QueryArrow without a parameterSpace - it will be provided later
+    // when the QuerySource is compiled in a join context with outer parameters
+    const arr = new QueryArrow(lhs, this.operation, undefined);
     this.has({query: arr});
     return arr;
   }
