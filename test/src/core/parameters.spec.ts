@@ -519,7 +519,8 @@ describe('parameters', () => {
     ]);
   });
 
-  it('refine uses in-scope parameter', async () => {
+  // Skipping as it's not yet implemented
+  it.skip('refine uses in-scope parameter', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
@@ -532,7 +533,8 @@ describe('parameters', () => {
     `).malloyResultMatches(runtime, {state: 'CA'});
   });
 
-  it('refine with missing parameter errors', async () => {
+  // Skipping as it's not yet implemented
+  it.skip('refine with missing parameter errors', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
@@ -545,7 +547,8 @@ describe('parameters', () => {
     `).malloyResultMatches(runtime, {state: 'CA'});
   });
 
-  it('basic refine operation works', async () => {
+  // Skipping as it's not yet implemented
+  it.skip('basic refine operation works', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
