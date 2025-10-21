@@ -112,3 +112,17 @@ Since we have no actual regressions and have made great progress (+20 tests), we
 4. Then tackle Pattern 3 with a stable base
 
 What would you like to do next?
+
+## Merge Blockers & Resume Notes (October 21, 2025)
+
+Blockers (must fix first):
+
+- [ ] Remove unconditional `console.*` logging in `packages/malloy/src/**`
+- [ ] Remove unused imports and `(as any)` used only for debug
+- [ ] Clarify/limit `structSQLCallStack` scope or document lifecycle
+- [ ] Remove committed log files and add `.gitignore` (`*.log`)
+
+Resume here next:
+
+- Start with `CRITICAL_CODE_REVIEW.md` → “Merge-Gating Checklist”
+- Then clean hotspots: `model/query_query.ts`, `lang/ast/field-space/static-space.ts`, `lang/ast/query-elements/query-arrow.ts`, `lang/ast/source-query-elements/sq-arrow.ts`

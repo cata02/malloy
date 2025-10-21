@@ -125,3 +125,19 @@ Located in repo root:
 
 **Last Updated:** October 20, 2025
 **Status:** Documentation organized and consolidated
+
+## Continue Here Next (October 21, 2025)
+
+- Read: `CRITICAL_CODE_REVIEW.md` → “Merge-Gating Checklist” section
+- Then: Execute cleanup in this order (safe, non-destructive):
+  1) Remove unconditional logging in `packages/malloy/src/**`
+  2) Clean unused imports and `(as any)` used only for logs
+  3) Add/confirm lifecycle comment for `structSQLCallStack` (or scope it)
+  4) Run tests; verify no regressions
+
+Quick links:
+
+- `packages/malloy/src/model/query_query.ts`
+- `packages/malloy/src/lang/ast/field-space/static-space.ts`
+- `packages/malloy/src/lang/ast/query-elements/query-arrow.ts`
+- `packages/malloy/src/lang/ast/source-query-elements/sq-arrow.ts`

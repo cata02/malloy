@@ -139,6 +139,15 @@ Successfully enabled these parameter scenarios (+20 tests):
 6. ⏳ Address refine operation failures (7 tests) - optional
 7. ⏳ Fix filter expression type checking (1 test) - optional
 
+## Required Before Merge (October 21, 2025)
+
+- [ ] Remove unconditional logging across `packages/malloy/src/**`
+- [ ] Remove unused imports introduced for debug
+- [ ] Remove unsafe debug-only casts
+- [ ] Add lifecycle comment or scope `structSQLCallStack`
+- [ ] Full tests green vs branch baseline; no regressions
+- [ ] Remove committed log files and add `.gitignore` entries (`*.log`)
+
 ## Documentation Index
 
 - **MAIN_BRANCH_BASELINE.md** - Reference for what works on main

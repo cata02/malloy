@@ -479,3 +479,18 @@ run: mydata(filter is "value") -> {
 
 ### 🎯 Impact
 These changes unlock a major new capability in Malloy: **parameterized join pipelines**. This enables dynamic, context-aware data modeling that was previously impossible.
+
+## Pre-merge Cleanup Checklist (October 21, 2025)
+
+- [ ] Remove unconditional `console.*` calls added during investigation
+- [ ] Remove unused imports and debug-only `(as any)` casts
+- [ ] Add lifecycle note or scope `structSQLCallStack`
+- [ ] Run full tests; confirm no regressions
+- [ ] Remove committed log files; add `.gitignore` rule (`*.log`)
+
+Where to start:
+
+- `packages/malloy/src/model/query_query.ts`
+- `packages/malloy/src/lang/ast/field-space/static-space.ts`
+- `packages/malloy/src/lang/ast/query-elements/query-arrow.ts`
+- `packages/malloy/src/lang/ast/source-query-elements/sq-arrow.ts`
