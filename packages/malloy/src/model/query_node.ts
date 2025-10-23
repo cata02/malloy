@@ -417,9 +417,27 @@ function identifierNormalize(s: string) {
   return s.replace(/[^a-zA-Z0-9_]/g, '_o_');
 }
 
+/**
+ * Parameter scope for tracking parameter bindings separately from structural parent chain.
+ * This allows parameters to flow through query pipelines and joins without coupling
+ * to the structural query tree.
+ */
+export interface ParameterScope {
+  /** Bindings available in this scope (parameter name -> Argument) */
+  readonly bindings: Record<string, Argument>;
+  /** Parent scope in the lexical chain (not the structural parent) */
+  readonly parent?: ParameterScope;
+  /** Metadata for debugging and diagnostics */
+  readonly meta: {
+    origin: 'run' | 'source' | 'stage' | 'join' | 'pipeline' | 'view';
+    name: string;
+  };
+}
+
 /** Structure object as it is used to build a query */
 export class QueryStruct {
   parent: QueryStruct | undefined;
+  paramScope: ParameterScope;
   model: ModelRootInterface;
   nameMap = new Map<string, QueryField>();
   pathAliasMap: Map<string, string>;
@@ -465,7 +483,17 @@ export class QueryStruct {
     }
     this.setParent(parent);
 
+    // Initialize paramScope (separate from structural parent)
     if ('model' in parent) {
+      // Root scope: no parent scope, bindings from sourceArguments
+      this.paramScope = {
+        bindings: sourceArguments || {},
+        parent: undefined,
+        meta: {
+          origin: 'run',
+          name: getIdentifier(structDef),
+        },
+      };
       this.model = parent.model;
       this.pathAliasMap = new Map<string, string>();
       if (isSourceDef(structDef)) {
@@ -474,6 +502,15 @@ export class QueryStruct {
         throw new Error('All root StructDefs should be a baseTable');
       }
     } else {
+      // Child scope: inherit from parent struct's paramScope
+      this.paramScope = {
+        bindings: sourceArguments || {},
+        parent: parent.struct.paramScope,
+        meta: {
+          origin: 'source', // Will be refined in specific contexts (join, pipeline, etc.)
+          name: getIdentifier(structDef),
+        },
+      };
       this.model = this.getModel();
       this.pathAliasMap = this.root().pathAliasMap;
       this.connectionName = this.root().connectionName;
@@ -591,7 +628,9 @@ export class QueryStruct {
       // Build a concrete argument map: literals stay literals; parameter-node inputs resolve via parent
       const params = this.structDef.parameters ?? {};
       const declaredArgs = this.structDef.arguments ?? {};
-      const incoming = {...declaredArgs, ...(this.sourceArguments ?? {})};
+      // Changed order: declaredArgs takes precedence initially, but we'll apply sourceArguments
+      // selectively later for parameters that are references
+      const incoming = {...(this.sourceArguments ?? {}), ...declaredArgs};
       if (process.env['MALLOY_DEBUG_ARGS']) {
         try {
           // Log raw incoming nodes to verify literal vs parameter refs
@@ -711,14 +750,15 @@ export class QueryStruct {
           }
           const resolved = resolveFromParents(refName);
           if (!resolved) {
-            throw new Error(
-              `Parameter '${refName}' not found in current scope`
-            );
+            // During model loading, parent might not have arguments resolved yet.
+            // Keep the parameter reference as-is; it will be resolved at runtime.
+            this._arguments[name] = arg as Argument;
+          } else {
+            this._arguments[name] = {
+              ...(arg as any),
+              value: resolved.value,
+            } as Argument;
           }
-          this._arguments[name] = {
-            ...(arg as any),
-            value: resolved.value,
-          } as Argument;
         } else if (v !== null && v !== undefined) {
           this._arguments[name] = arg as Argument;
         } else {
@@ -736,12 +776,25 @@ export class QueryStruct {
         }
       }
 
-      // Ensure provided sourceArguments take precedence when they have concrete values
+      // Ensure provided sourceArguments take precedence, but only for parameters that don't have
+      // a concrete value in declaredArgs. This ensures that:
+      // 1. declaredArgs with concrete values take precedence over sourceArguments
+      // 2. sourceArguments can override declaredArgs that are parameter references
+      // 3. sourceArguments still get applied for parameters not in declaredArgs
       if (this.sourceArguments) {
         for (const [k, v] of Object.entries(this.sourceArguments)) {
           const vv: any = (v as any)?.value;
-          if (vv !== null && vv !== undefined) {
-            this._arguments[k] = v as Argument;
+          const declaredValue = declaredArgs[k]?.value;
+          const declaredIsParamRef =
+            declaredValue && (declaredValue as any).node === 'parameter';
+
+          // Apply sourceArguments if:
+          // 1. Parameter is not in declaredArgs, OR
+          // 2. Parameter is in declaredArgs but its value is a parameter reference
+          if (!(k in declaredArgs) || declaredIsParamRef) {
+            if (vv !== null && vv !== undefined) {
+              this._arguments[k] = v as Argument;
+            }
           }
         }
       }
@@ -834,6 +887,12 @@ export class QueryStruct {
     } catch (_e) {
       // debug instrumentation only
     }
+
+    // IMPORTANT: Update paramScope.bindings with the computed arguments
+    // This ensures that child structs (like joins) can inherit the runtime parameter values
+    // even if they were created before the runtime wrapper
+    (this.paramScope as any).bindings = this._arguments;
+
     return this._arguments;
   }
 

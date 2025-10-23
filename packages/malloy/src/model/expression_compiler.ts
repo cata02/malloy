@@ -757,38 +757,37 @@ export function generateParameterFragment(
 ): string {
   const name = expr.path[0];
 
-  // DEBUG: Trace parent chain to find parameter values
-  console.log('[generateParameterFragment] Looking for parameter:', {
-    paramName: name,
-    contextStructName: (context as any).structDef?.name,
-    contextArgs: Object.keys(context.arguments()),
-    hasParent: !!context.parent,
-  });
-
-  let cur: any = context;
-  let depth = 0;
-  while (cur && depth < 10) {
-    const args = cur.arguments?.();
-    console.log(`[generateParameterFragment] Parent chain [${depth}]:`, {
-      structName: cur.structDef?.name,
-      structType: cur.structDef?.type,
-      hasSourceArgs: !!cur.sourceArguments,
-      sourceArgKeys: cur.sourceArguments
-        ? Object.keys(cur.sourceArguments)
-        : [],
-      argKeys: args ? Object.keys(args) : [],
-      paramValue: args?.[name]
-        ? {hasValue: !!args[name].value, valueNode: args[name].value?.node}
-        : 'not found',
-    });
-    cur = cur.parent;
-    depth++;
-  }
-
   // Only rely on context.arguments() for parameter values
   const argument = context.arguments()[name];
-  const value = argument?.value;
-  if (value) {
+  let value = argument?.value;
+
+  // If value is null, undefined, or still a parameter reference, try to re-inherit from paramScope
+  // This handles the case where the parameter was inherited during struct creation
+  // but the parent didn't have the value yet (e.g., runtime wrapper created later)
+  if (
+    value === null ||
+    value === undefined ||
+    (value as any)?.node === 'parameter'
+  ) {
+    let curScope: any = (context as any).paramScope;
+    let depth = 0;
+    while (curScope && depth < 20) {
+      const found = curScope.bindings[name];
+      if (
+        found &&
+        found.value !== null &&
+        found.value !== undefined &&
+        (found.value as any)?.node !== 'parameter'
+      ) {
+        value = found.value;
+        break;
+      }
+      curScope = curScope.parent;
+      depth++;
+    }
+  }
+
+  if (value && (value as any)?.node !== 'parameter') {
     return exprToSQL(resultSet, context, value, state);
   }
 
@@ -798,9 +797,6 @@ export function generateParameterFragment(
   // Use a type-appropriate placeholder so SQL generation can proceed
   // for schema extraction purposes.
   if (argument) {
-    console.log(
-      `[generateParameterFragment] Using placeholder for parameter '${name}' during schema resolution`
-    );
     const dialect = context.dialect;
 
     // Generate a placeholder based on parameter type
@@ -830,9 +826,6 @@ export function generateParameterFragment(
     stack.includes('getFinalOutputStruct') ||
     stack.includes('resolveQueryFields')
   ) {
-    console.log(
-      `[generateParameterFragment] Parameter '${name}' not in context.arguments(), but in schema resolution mode - using generic placeholder`
-    );
     const dialect = context.dialect;
     // Use string placeholder as we don't know the type
     return dialect.sqlLiteralString(`$PARAM_${name}$`);

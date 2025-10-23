@@ -470,6 +470,7 @@ describe('parameters', () => {
         group_by:
           s1 is state,
           s2 is filtered_facts.state
+        where: filtered_facts.state is not null
         aggregate: c is count()
       }
     `).malloyResultMatches(runtime, {s1: 'CA', s2: 'CA', c: 1});
@@ -494,6 +495,7 @@ describe('parameters', () => {
       run: state_facts3(state_filter3 is 'CA') -> {
         group_by:
           s is filtered.state
+        where: filtered.state is not null
         aggregate: c is count()
       }
     `).malloyResultMatches(runtime, {s: 'CA', c: 1});

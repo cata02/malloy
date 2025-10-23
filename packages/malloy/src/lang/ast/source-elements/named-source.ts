@@ -24,6 +24,7 @@
 
 import type {
   Argument,
+  Expr,
   InvokedStructRef,
   Parameter,
   SourceDef,
@@ -157,6 +158,138 @@ export class NamedSource extends Source {
     return this.evaluateArguments(parameterSpace, base.parameters, []);
   }
 
+  /**
+   * Recursively resolve all parameter references in an expression tree.
+   *
+   * This handles cases where an expression contains parameter references that need
+   * to be replaced with their concrete values before constant folding can occur.
+   * For example, if we have:
+   *   - param = 11
+   *   - param2 is param + 1
+   *
+   * This method transforms the expression tree for `param + 1` from:
+   *   {node: '+', kids: {left: {node: 'parameter', path: ['param']}, right: 1}}
+   * to:
+   *   {node: '+', kids: {left: {node: 'numberLiteral', literal: '11'}, right: 1}}
+   *
+   * After this resolution, tryFoldConstantExpr can then fold it to:
+   *   {node: 'numberLiteral', literal: '12'}
+   */
+  private resolveParametersInExpr(
+    expr: Expr,
+    paramSpace: ParameterSpace
+  ): Expr {
+    // Base case: if this is a parameter node, resolve it
+    if (expr.node === 'parameter' && Array.isArray((expr as any).path)) {
+      const paramName = (expr as any).path[0];
+      const resolved = paramSpace.entry(paramName);
+      if (resolved && resolved.refType === 'parameter') {
+        const resolvedParam = (resolved as any).parameter();
+        if (resolvedParam.value) {
+          // Recursively resolve in case the resolved value also contains parameters
+          return this.resolveParametersInExpr(resolvedParam.value, paramSpace);
+        }
+      }
+      return expr;
+    }
+
+    // Recursive case: if this node has kids, resolve them
+    const exprAny = expr as any;
+    if (exprAny.kids) {
+      const kids = exprAny.kids;
+      const resolvedKids: any = {};
+      for (const [key, child] of Object.entries(kids)) {
+        if (child && typeof child === 'object' && (child as any).node) {
+          resolvedKids[key] = this.resolveParametersInExpr(
+            child as Expr,
+            paramSpace
+          );
+        } else {
+          resolvedKids[key] = child;
+        }
+      }
+      return {...exprAny, kids: resolvedKids} as Expr;
+    }
+
+    // If no kids, return as-is
+    return expr;
+  }
+
+  /**
+   * Try to fold constant arithmetic expressions to literal values at compile time.
+   * This handles simple cases like 11 + 1 -> 12.
+   *
+   * CONTEXT: This is an optimization over the previous approach, which stored expression
+   * trees as-is and let the database evaluate them at query execution time (e.g., SQL
+   * would contain "11+1" and the database would compute it). Compile-time folding:
+   * - Reduces work for the database
+   * - Makes generated SQL cleaner (e.g., "12" instead of "11+1")
+   * - Catches errors earlier (at compile time vs runtime)
+   *
+   * SCOPE: Currently only handles basic arithmetic (+, -, *, /) on number literals.
+   * Could be extended to handle more operations (string concatenation, logical ops, etc.)
+   * if needed, but the current implementation is intentionally kept simple.
+   *
+   * ALTERNATIVE APPROACHES:
+   * 1. Use constantExprToSQL + database evaluation (most powerful, but requires DB access)
+   * 2. Visitor pattern for extensibility (more boilerplate for simple cases)
+   * 3. Keep current approach (recommended - simple and works well for the use case)
+   *
+   * See discussion in conversation history for more details on alternatives.
+   */
+  private tryFoldConstantExpr(expr: Expr): Expr {
+    // Only fold binary arithmetic operations
+    if (
+      (expr.node === '+' ||
+        expr.node === '-' ||
+        expr.node === '*' ||
+        expr.node === '/') &&
+      (expr as any).kids
+    ) {
+      const kids = (expr as any).kids;
+      const left = kids.left;
+      const right = kids.right;
+
+      // Both operands must be number literals
+      if (
+        left?.node === 'numberLiteral' &&
+        right?.node === 'numberLiteral' &&
+        left.literal &&
+        right.literal
+      ) {
+        const leftVal = Number(left.literal);
+        const rightVal = Number(right.literal);
+
+        if (!isNaN(leftVal) && !isNaN(rightVal)) {
+          let result: number;
+          switch (expr.node) {
+            case '+':
+              result = leftVal + rightVal;
+              break;
+            case '-':
+              result = leftVal - rightVal;
+              break;
+            case '*':
+              result = leftVal * rightVal;
+              break;
+            case '/':
+              result = leftVal / rightVal;
+              break;
+            default:
+              return expr;
+          }
+
+          return {
+            node: 'numberLiteral',
+            literal: String(result),
+          };
+        }
+      }
+    }
+
+    return expr;
+  }
+
   private evaluateArguments(
     parameterSpace: ParameterSpace | undefined,
     parametersIn: Record<string, Parameter> | undefined,
@@ -220,6 +353,19 @@ export class NamedSource extends Source {
           } else {
             break;
           }
+        }
+
+        // NEW: If the value is an expression containing parameters (not just a direct parameter reference),
+        // we need to recursively resolve all parameter references within the expression tree
+        if (
+          value &&
+          value.node !== 'parameter' &&
+          pVal.evalSpace === 'constant'
+        ) {
+          const resolvedValue = this.resolveParametersInExpr(value, paramSpace);
+          // Try to fold constant expressions (e.g., 11 + 1 -> 12)
+          const foldedValue = this.tryFoldConstantExpr(resolvedValue);
+          value = foldedValue;
         }
 
         if (
