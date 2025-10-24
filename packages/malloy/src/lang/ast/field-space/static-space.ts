@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {Dialect} from '../../../dialect/dialect';
 import {getDialect} from '../../../dialect/dialect_map';
 import type {
@@ -30,6 +31,7 @@ import type {
   AccessModifierLabel,
 } from '../../../model/malloy_types';
 import {isJoined, isTurtle, isSourceDef} from '../../../model/malloy_types';
+
 import type {SpaceEntry} from '../types/space-entry';
 import type {LookupResult} from '../types/lookup-result';
 import type {
@@ -46,11 +48,14 @@ import {SpaceField} from '../types/space-field';
 import {StructSpaceFieldBase} from './struct-space-field-base';
 import {ColumnSpaceField} from './column-space-field';
 import {IRViewField} from './ir-view-field';
+
 type FieldMap = Record<string, SpaceEntry>;
+
 export class StaticSpace implements FieldSpace {
   readonly type = 'fieldSpace';
   private memoMap?: FieldMap;
   protected fromStruct: StructDef;
+
   constructor(
     struct: StructDef,
     protected readonly structDialect: string,
@@ -58,12 +63,15 @@ export class StaticSpace implements FieldSpace {
   ) {
     this.fromStruct = struct;
   }
+
   dialectName(): string {
     return this.structDialect;
   }
+
   connectionName(): string {
     return this.structConnection;
   }
+
   dialectObj(): Dialect | undefined {
     try {
       return getDialect(this.structDialect);
@@ -71,6 +79,7 @@ export class StaticSpace implements FieldSpace {
       return undefined;
     }
   }
+
   defToSpaceField(from: FieldDef): SpaceField {
     if (isJoined(from)) {
       return new StructSpaceField(
@@ -83,6 +92,7 @@ export class StaticSpace implements FieldSpace {
     }
     return new ColumnSpaceField(from);
   }
+
   private get map(): FieldMap {
     if (this.memoMap === undefined) {
       this.memoMap = {};
@@ -107,28 +117,36 @@ export class StaticSpace implements FieldSpace {
     }
     return this.memoMap;
   }
+
   accessProtectionLevel(): AccessModifierLabel {
     return 'internal';
   }
+
   protected dropEntries(): void {
     this.memoMap = {};
   }
+
   protected dropEntry(name: string): void {
     delete this.map[name];
   }
+
   // TODO this was protected
   entry(name: string): SpaceEntry | undefined {
     return this.map[name];
   }
+
   protected setEntry(name: string, value: SpaceEntry): void {
     this.map[name] = value;
   }
+
   entries(): [string, SpaceEntry][] {
     return Object.entries(this.map);
   }
+
   structDef(): StructDef {
     return this.fromStruct;
   }
+
   emptyStructDef(): StructDef {
     const ret = {...this.fromStruct};
     if (isSourceDef(ret)) {
@@ -137,6 +155,7 @@ export class StaticSpace implements FieldSpace {
     ret.fields = [];
     return ret;
   }
+
   lookup(path: FieldName[], accessLevel?: AccessModifierLabel): LookupResult {
     accessLevel ??= this.accessProtectionLevel();
     const head = path[0];
@@ -224,10 +243,12 @@ export class StaticSpace implements FieldSpace {
     }
     return {found, error: undefined, joinPath, isOutputField: false};
   }
+
   isQueryFieldSpace(): this is QueryFieldSpace {
     return false;
   }
 }
+
 export class StructSpaceField extends StructSpaceFieldBase {
   constructor(
     def: JoinFieldDef,
@@ -237,6 +258,7 @@ export class StructSpaceField extends StructSpaceFieldBase {
   ) {
     super(def);
   }
+
   get fieldSpace(): FieldSpace {
     const isSource = isSourceDef(this.structDef);
     if (isSource) {
@@ -254,6 +276,7 @@ export class StructSpaceField extends StructSpaceFieldBase {
     }
   }
 }
+
 export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
   constructor(
     protected source: SourceDef,
@@ -262,18 +285,22 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
   ) {
     super(source, source.dialect, source.connection);
   }
+
   structDef(): SourceDef {
     return this.source;
   }
+
   emptyStructDef(): SourceDef {
     const ret = {...this.source};
     ret.parameters = {};
     ret.fields = [];
     return ret;
   }
+
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
   }
+
   // Override defToSpaceField to pass parameterSpaceRef to joins
   override defToSpaceField(from: FieldDef): SpaceField {
     if (isJoined(from)) {

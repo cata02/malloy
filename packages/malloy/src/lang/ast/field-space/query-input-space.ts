@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 /**
  * Unlike a source, which is a refinement of a namespace, a query
  * is creating a new unrelated namespace. The query starts with a
@@ -27,6 +28,7 @@
  * expressions in the query is called the "input space". There is a
  * specialized QuerySpace for each type of query operation.
  */
+
 import type {AccessModifierLabel, SourceDef} from '../../../model';
 import type {AtomicFieldDeclaration} from '../query-items/field-declaration';
 import {Join} from '../source-properties/join';
@@ -35,8 +37,10 @@ import type {QueryOperationSpace} from './query-spaces';
 import {RefinedSpace} from './refined-space';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import type {SpaceEntry} from '../types/space-entry';
+
 export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   extendList: string[] = [];
+
   /**
    * Because of circularity concerns this constructor is not typed
    * properly ...
@@ -50,6 +54,7 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   ) {
     super(input);
   }
+
   extendSource(extendField: Join | AtomicFieldDeclaration): void {
     this.pushFields(extendField);
     if (extendField instanceof Join) {
@@ -58,18 +63,23 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
       this.extendList.push(extendField.defineName);
     }
   }
+
   isQueryFieldSpace(): this is QueryFieldSpace {
     return true;
   }
+
   outputSpace() {
     return this.queryOutput;
   }
+
   inputSpace() {
     return this;
   }
+
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
   }
+
   parameterSpace(): ParameterSpace {
     const provided = this.queryOutput.parameterSpace?.();
     if (provided) {
@@ -82,6 +92,7 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
     );
     return superParam;
   }
+
   // Override entry() to also check the parameterSpace
   override entry(name: string): SpaceEntry | undefined {
     // First check the regular fields
@@ -99,6 +110,7 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
     }
     return undefined;
   }
+
   isQueryOutputSpace() {
     return false;
   }

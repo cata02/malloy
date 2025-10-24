@@ -20,12 +20,14 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {maxExpressionType, mergeEvalSpaces} from '../../../model';
 import * as TDU from '../typedesc-utils';
 import type {ExprValue} from '../types/expr-value';
 import {ExpressionDef} from '../types/expression-def';
 import type {FieldSpace} from '../types/field-space';
 import {mergeFieldUsage} from '../../composite-source-utils';
+
 export class ExprCoalesce extends ExpressionDef {
   elementType = 'coalesce expression';
   legalChildTypes = TDU.anyAtomicT;
@@ -35,6 +37,7 @@ export class ExprCoalesce extends ExpressionDef {
   ) {
     super({expr, altExpr});
   }
+
   getExpression(fs: FieldSpace): ExprValue {
     const maybeNull = this.expr.getExpression(fs);
     const whenNull = this.altExpr.getExpression(fs);

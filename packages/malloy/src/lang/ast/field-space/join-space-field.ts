@@ -20,9 +20,11 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {Join} from '../source-properties/join';
 import type {ParameterSpace} from './parameter-space';
 import {StaticSourceSpace, StructSpaceField} from './static-space';
+
 export class JoinSpaceField extends StructSpaceField {
   constructor(
     readonly parameterSpace: ParameterSpace,
@@ -32,6 +34,7 @@ export class JoinSpaceField extends StructSpaceField {
   ) {
     super(join.getStructDef(parameterSpace), forDialect, forConnection);
   }
+
   get fieldSpace() {
     const base = super.fieldSpace;
     if (base instanceof StaticSourceSpace) {

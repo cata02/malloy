@@ -4,15 +4,18 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 import {Tag} from '@malloydata/malloy-tag';
 import {compileModel, compileQuery, compileSource} from './stateless';
 import type * as Malloy from '@malloydata/malloy-interfaces';
 import {extractMalloyObjectFromTag} from '../to_stable';
+
 type DeepPartial<T> = T extends object
   ? {
       [P in keyof T]?: DeepPartial<T[P]>;
     }
   : T;
+
 describe('api', () => {
   describe('compile model', () => {
     test('compile model with table dependency', () => {

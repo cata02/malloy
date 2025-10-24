@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import * as model from '../../../model/malloy_types';
 import {isSourceDef} from '../../../model/malloy_types';
 import {mergeFields, nameFromDef} from '../../field-utils';
@@ -31,6 +32,7 @@ import type {
 import {FieldName} from '../types/field-space';
 import type {MalloyElement} from '../types/malloy-element';
 import {SpaceField} from '../types/space-field';
+
 import type {ParameterSpace} from '../field-space/parameter-space';
 import {
   RefineFromFieldReference,
@@ -50,10 +52,12 @@ import {emptyFieldUsage, mergeFieldUsage} from '../../composite-source-utils';
 import {ErrorFactory} from '../error-factory';
 import {ReferenceField} from './reference-field';
 import {RefineFromSpaceField} from './refine-from-space-field';
+
 type TranslatedQueryField = {
   queryFieldDef: model.QueryFieldDef;
   typeDesc: model.TypeDesc;
 };
+
 /**
  * The output space of a query operation. It is not named "QueryOutputSpace"
  * because this is the namespace of the Query which is a layer of an output and
@@ -91,6 +95,7 @@ export abstract class QueryOperationSpace
         field: SpaceField;
       }
   )[] = [];
+
   // Composite field usage is not computed until `queryFieldDefs` is called
   // (or `getPipeSegment` for index segments); if anyone
   // tries to access it before that, they'll get an error
@@ -101,6 +106,7 @@ export abstract class QueryOperationSpace
     }
     return this._fieldUsage;
   }
+
   constructor(
     readonly queryInputSpace: SourceFieldSpace,
     refineThis: model.PipeSegment | undefined,
@@ -108,6 +114,7 @@ export abstract class QueryOperationSpace
     readonly astEl: MalloyElement
   ) {
     super(queryInputSpace.emptyStructDef());
+
     this.exprSpace = new QueryInputSpace(
       queryInputSpace.structDef(),
       this,
@@ -115,7 +122,9 @@ export abstract class QueryOperationSpace
     );
     if (refineThis) this.addRefineFromFields(refineThis);
   }
+
   abstract addRefineFromFields(refineThis: model.PipeSegment): void;
+
   logError<T extends MessageCode>(
     code: T,
     parameters: MessageParameterType<T>,
@@ -126,15 +135,19 @@ export abstract class QueryOperationSpace
     }
     return code;
   }
+
   accessProtectionLevel(): model.AccessModifierLabel {
     return 'public';
   }
+
   inputSpace(): QueryInputSpace {
     return this.exprSpace;
   }
+
   outputSpace(): QueryOperationSpace {
     return this;
   }
+
   parameterSpace(): ParameterSpace {
     const provided = this.queryInputSpace.parameterSpace?.();
     if (provided) {
@@ -142,9 +155,11 @@ export abstract class QueryOperationSpace
     }
     return super.parameterSpace();
   }
+
   isQueryOutputSpace() {
     return true;
   }
+
   protected addWild(wild: WildcardFieldReference): void {
     let current: FieldSpace = this.exprSpace;
     const joinPath: string[] = [];
@@ -218,6 +233,7 @@ export abstract class QueryOperationSpace
       this.newEntry(x.name, wild, x.entry);
     }
   }
+
   protected addValidatedCompositeFieldUserFromEntry(
     name: string,
     entry: SpaceEntry
@@ -230,21 +246,25 @@ export abstract class QueryOperationSpace
       });
     }
   }
+
   public addFieldUserFromFilter(filter: model.FilterCondition) {
     if (filter.fieldUsage !== undefined) {
       this.compositeFieldUsers.push({type: 'filter', filter});
     }
   }
+
   newEntry(name: string, logTo: MalloyElement, entry: SpaceEntry): void {
     if (entry instanceof SpaceField) {
       this.compositeFieldUsers.push({type: 'field', name, field: entry});
     }
     super.newEntry(name, logTo, entry);
   }
+
   isQueryFieldSpace(): this is QueryFieldSpace {
     return true;
   }
 }
+
 // Project and Reduce or "QuerySegments" are built from a QuerySpace
 export abstract class QuerySpace extends QueryOperationSpace {
   addRefineFromFields(refineThis: model.PipeSegment) {
@@ -278,6 +298,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
       }
     }
   }
+
   pushFields(...defs: MalloyElement[]): void {
     for (const f of defs) {
       if (f instanceof WildcardFieldReference) {
@@ -287,13 +308,16 @@ export abstract class QuerySpace extends QueryOperationSpace {
       }
     }
   }
+
   canContain(_typeDescResult: model.TypeDesc | undefined) {
     return true;
   }
+
   protected queryFieldDefs(): model.QueryFieldDef[] {
     const fields = this.translateQueryFields();
     return fields.map(f => f.queryFieldDef);
   }
+
   protected getOutputFieldDef(
     queryFieldDef: model.QueryFieldDef,
     typeDesc: model.TypeDesc
@@ -347,6 +371,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     ret.location = ret.location ?? this.astEl.location;
     return ret;
   }
+
   // Gets the primary key field for the output struct of this query;
   // If there is exactly one scalar field, that is the primary key
   protected getPrimaryKey(fields: TranslatedQueryField[]) {
@@ -363,6 +388,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
       return primaryKeyField.as ?? primaryKeyField.name;
     }
   }
+
   // This returns the OUTPUT struct of this query space
   structDef(): model.SourceDef {
     const fields = this.translateQueryFields();
@@ -382,6 +408,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     };
     return sourceDef;
   }
+
   translatedQueryFields: TranslatedQueryField[] | undefined;
   protected translateQueryFields(): TranslatedQueryField[] {
     if (this.translatedQueryFields) {
@@ -447,6 +474,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     this.translatedQueryFields = fields;
     return fields;
   }
+
   getQuerySegment(rf: model.QuerySegment | undefined): model.QuerySegment {
     const p = this.getPipeSegment(rf);
     if (model.isQuerySegment(p)) {
@@ -454,6 +482,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     }
     throw new Error('TODO NOT POSSIBLE');
   }
+
   protected isRepeated(): boolean {
     const fields = this.translateQueryFields();
     const dimensions = fields.filter(
@@ -463,6 +492,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     );
     return dimensions.length > 0;
   }
+
   getPipeSegment(
     refineFrom: model.QuerySegment | undefined
   ): model.PipeSegment {
@@ -501,6 +531,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     }
     return segment;
   }
+
   lookup(path: FieldName[]): LookupResult {
     const result = super.lookup(path);
     if (result.found) {
@@ -509,6 +540,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
     return this.exprSpace.lookup(path);
   }
 }
+
 export class ReduceFieldSpace extends QuerySpace {
   readonly segmentType = 'reduce';
 }

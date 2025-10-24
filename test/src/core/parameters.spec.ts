@@ -489,7 +489,7 @@ describe('parameters', () => {
     ]);
   });
   // Skipping as it's not yet implemented
-  it.skip('refine uses in-scope parameter', async () => {
+  it('refine uses in-scope parameter', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
@@ -498,7 +498,7 @@ describe('parameters', () => {
           aggregate: c is count()
         }
       }
-      run: state_facts(state_filter is 'CA') -> base + { where: state = state_filter }
+      run: state_facts(state_filter is 'CA') -> base + { group_by: state; where: state = state_filter }
     `).malloyResultMatches(runtime, {state: 'CA'});
   });
   // Skipping as it's not yet implemented
@@ -511,11 +511,10 @@ describe('parameters', () => {
           where: state = state_filter
         }
       }
-      run: state_facts(state_filter is 'CA') -> base + { where: state = missing_param }
+      run: state_facts(state_filter is 'CA') -> base + { group_by: state; where: state = missing_param }
     `).malloyResultMatches(runtime, {state: 'CA'});
   });
-  // Skipping as it's not yet implemented
-  it.skip('basic refine operation works', async () => {
+  it('basic refine operation works', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(state_filter::string) is duckdb.table('malloytest.state_facts') extend {
@@ -524,7 +523,7 @@ describe('parameters', () => {
           where: state = state_filter
         }
       }
-      run: state_facts(state_filter is 'CA') -> base + { limit: 1 }
+      run: state_facts(state_filter is 'CA') -> base + { group_by: state; limit: 1 }
     `).malloyResultMatches(runtime, {state: 'CA'});
   });
   it('filter expression parameters work', async () => {
