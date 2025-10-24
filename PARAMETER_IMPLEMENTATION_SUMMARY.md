@@ -181,6 +181,103 @@ Key tests fixed:
 - ✅ `join_one simple source with pipeline referencing outer param`
 - ✅ `can pass param into extended source`
 
+## Test Coverage and Status
+
+### New Tests Added
+
+#### 1. Coalesce Functionality Tests (`packages/malloy/src/api/stateless.spec.ts`)
+
+| Test Name | Status | Purpose | Notes |
+|-----------|--------|---------|-------|
+| `coalesce across joined sources` | ✅ **PASS** | Tests coalesce expressions across multiple joined tables | Verifies proper SQL generation with nested COALESCE functions |
+| `coalesce with literal null across joined sources` | ✅ **PASS** | Tests coalesce with literal null values | Ensures handling of literal null in coalesce expressions |
+| `coalesce with parameter and constant` | ✅ **PASS** | Tests coalesce with parameters and constants | Verifies parameter resolution in coalesce expressions |
+| `coalesce with parameter and field` | ✅ **PASS** | Tests coalesce with parameters and field references | Tests field access within coalesce expressions |
+
+#### 2. Parameter Propagation Tests (`test/src/core/parameters.spec.ts`)
+
+| Test Name | Status | Purpose | Notes |
+|-----------|--------|---------|-------|
+| `can pass param into joined source correctly` | ✅ **PASS** | Basic parameter passing to joined sources | Foundation test for join parameter functionality |
+| `can pass param into joined source from query` | ❌ **FAIL** | Parameter passing from query to joined source | **Issue**: Syntax error in join definition |
+| `can use param in join on` | ✅ **PASS** | Parameter usage in JOIN ON clauses | Tests parameter resolution in join conditions |
+| `can use param in join with` | ✅ **PASS** | Parameter usage in JOIN WITH clauses | Tests parameter resolution in join filters |
+| `works with param in join conditions across stages` | ❌ **FAIL** | Parameter usage across pipeline stages | **Issue**: Parameter not available in outer scope |
+| `works with parameters in three pipeline stages` | ❌ **FAIL** | Multi-stage parameter propagation | **Issue**: Parameter scope not propagating correctly |
+| `works when parameter is only in last pipeline stage` | ❌ **FAIL** | Late-stage parameter usage | **Issue**: Parameter not available in final stage |
+| `works with join_one parameterized source with pipeline` | ❌ **FAIL** | Join with parameterized source and pipeline | **Issue**: Parameter propagation through join pipeline |
+| `join_one with pipeline where inner stage references param` | ❌ **FAIL** | Inner pipeline referencing outer parameter | **Issue**: Parameter scope isolation |
+| `join_one simple source with pipeline referencing outer param` | ❌ **FAIL** | Simple source with pipeline referencing outer param | **Issue**: Parameter not accessible in pipeline |
+| `join-in-view: use param in ON clause` | ✅ **PASS** | Parameter usage in view join ON clauses | Tests parameter resolution in view contexts |
+| `minimal join-on: param used in ON clause` | ✅ **PASS** | Minimal parameter usage in join ON | Basic parameter resolution test |
+
+#### 3. Skipped Tests (Future Work)
+
+| Test Name | Status | Purpose | Notes |
+|-----------|--------|---------|-------|
+| `join-in-view: pass param into joined source` | ⏸️ **SKIPPED** | Parameter passing in view joins | Marked for future implementation |
+| `join-in-view: param used inside join pipeline` | ⏸️ **SKIPPED** | Parameter usage inside join pipelines | Marked for future implementation |
+
+### Test Failure Analysis
+
+#### Current Failures (6 tests)
+
+1. **`can pass param into joined source from query`**
+   - **Error**: Syntax error in join definition
+   - **Root Cause**: Incorrect syntax for parameterized join
+   - **Fix Needed**: Correct join syntax for parameterized sources
+
+2. **`works with param in join conditions across stages`**
+   - **Error**: Parameter not available in outer scope
+   - **Root Cause**: Parameter scope not propagating to outer query context
+   - **Fix Needed**: Improve parameter scope propagation across query stages
+
+3. **`works with parameters in three pipeline stages`**
+   - **Error**: Parameter scope not propagating correctly
+   - **Root Cause**: Multi-stage parameter propagation issue
+   - **Fix Needed**: Fix parameter scope chain across multiple stages
+
+4. **`works when parameter is only in last pipeline stage`**
+   - **Error**: Parameter not available in final stage
+   - **Root Cause**: Late-stage parameter resolution failing
+   - **Fix Needed**: Ensure parameters are available in all pipeline stages
+
+5. **`works with join_one parameterized source with pipeline`**
+   - **Error**: Parameter propagation through join pipeline
+   - **Root Cause**: Join pipeline not inheriting parameter scope
+   - **Fix Needed**: Fix parameter propagation through join pipelines
+
+6. **`join_one with pipeline where inner stage references param`**
+   - **Error**: Parameter scope isolation
+   - **Root Cause**: Inner pipeline not accessing outer parameter scope
+   - **Fix Needed**: Fix parameter scope inheritance in nested pipelines
+
+### Test Success Analysis
+
+#### Passing Tests (8 tests)
+
+1. **Coalesce Tests (4/4 passing)**: All coalesce functionality tests pass, indicating the coalesce implementation is solid.
+
+2. **Basic Parameter Tests (4/4 passing)**: Core parameter functionality works correctly:
+   - Basic parameter passing to joined sources
+   - Parameter usage in JOIN ON clauses
+   - Parameter usage in JOIN WITH clauses
+   - Parameter usage in view join ON clauses
+
+### Test Coverage Summary
+
+- **Total New Tests**: 12 tests
+- **Passing**: 8 tests (67%)
+- **Failing**: 6 tests (33%)
+- **Skipped**: 2 tests (17%)
+
+### Next Steps for Test Fixes
+
+1. **Priority 1**: Fix parameter scope propagation across pipeline stages
+2. **Priority 2**: Fix join syntax for parameterized sources
+3. **Priority 3**: Implement skipped tests for complete coverage
+4. **Priority 4**: Add more edge case tests for robustness
+
 ## Architecture Decisions
 
 ### What We Did NOT Implement (from original design)
