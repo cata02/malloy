@@ -2,21 +2,16 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
-
 /* Centralized policy for query class transitions and stage decisions. */
-
 import type {PipeSegment} from '../../../model/malloy_types';
 import {QueryClass} from '../types/query-property-interface';
-
 export type SegmentType = 'reduce' | 'project' | 'index';
-
 export function segmentTypeFromPipeSegment(
   seg: PipeSegment | undefined
 ): SegmentType | undefined {
   if (!seg) return undefined;
   return seg.type as SegmentType;
 }
-
 export function normalizeQueryClass(
   classLike: QueryClass | string | undefined
 ): SegmentType | undefined {
@@ -41,14 +36,12 @@ export function normalizeQueryClass(
       return undefined;
   }
 }
-
 // Allowed cross-stage transitions for pipelines (not refinements)
 const allowedTransitions: ReadonlyArray<readonly [SegmentType, SegmentType]> = [
   ['reduce', 'project'],
   ['reduce', 'index'],
   ['project', 'index'],
 ];
-
 export function isAllowedPipelineTransition(
   fromSeg: SegmentType | undefined,
   toClassLike: QueryClass | string | undefined
@@ -61,7 +54,6 @@ export function isAllowedPipelineTransition(
     ([from, to]) => from === fromSeg && to === toSeg
   );
 }
-
 export function requiresNewStage(
   fromSeg: SegmentType | undefined,
   toClassLike: QueryClass | string | undefined
@@ -73,7 +65,6 @@ export function requiresNewStage(
     ([from, to]) => from === fromSeg && to === toSeg
   );
 }
-
 export function isIllegalRefineTransition(
   fromSeg: SegmentType | undefined,
   toClassLike: QueryClass | string | undefined

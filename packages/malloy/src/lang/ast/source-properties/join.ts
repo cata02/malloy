@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {
   Annotation,
   JoinFieldDef,
@@ -51,7 +50,6 @@ import {mergeFieldUsage} from '../../composite-source-utils';
 import {NamedSource} from '../source-elements/named-source';
 import {HasParameter} from '../parameters/has-parameter';
 import {AbstractParameter} from '../types/space-param';
-
 export abstract class Join
   extends MalloyElement
   implements Noteable, MakeEntry
@@ -63,7 +61,6 @@ export abstract class Join
   extendNote = extendNoteMethod;
   abstract sourceExpr: SourceQueryElement;
   note?: Annotation;
-
   makeEntry(fs: DynamicSpace) {
     fs.newEntry(
       this.name.refString,
@@ -76,11 +73,9 @@ export abstract class Join
       )
     );
   }
-
   getName(): string {
     return this.name.refString;
   }
-
   protected getStructDefFromExpr(parameterSpace: ParameterSpace): SourceDef {
     const source = this.sourceExpr.getSource();
     if (!source) {
@@ -93,7 +88,6 @@ export abstract class Join
     return source.getSourceDef(parameterSpace);
   }
 }
-
 export class KeyJoin extends Join {
   elementType = 'joinOnKey';
   constructor(
@@ -103,7 +97,6 @@ export class KeyJoin extends Join {
   ) {
     super({name, sourceExpr, keyExpr});
   }
-
   getStructDef(parameterSpace: ParameterSpace): JoinFieldDef {
     const sourceDef = this.getStructDefFromExpr(parameterSpace);
     if (!isJoinable(sourceDef)) {
@@ -118,14 +111,12 @@ export class KeyJoin extends Join {
       location: this.location,
     };
     delete joinStruct.as;
-
     if (this.note) {
       joinStruct.annotation = this.note;
     }
     this.document()?.rememberToAddModelAnnotations(joinStruct);
     return joinStruct;
   }
-
   fixupJoinOn(outer: FieldSpace, inStruct: JoinFieldDef): void {
     const exprX = this.keyExpr.getExpression(outer);
     if (isSourceDef(inStruct) && inStruct.primaryKey) {
@@ -171,7 +162,6 @@ export class KeyJoin extends Join {
     }
   }
 }
-
 export class ExpressionJoin extends Join {
   elementType = 'joinOnExpr';
   joinType: JoinType = 'one';
@@ -183,16 +173,13 @@ export class ExpressionJoin extends Join {
   ) {
     super({name, sourceExpr});
   }
-
   set joinOn(joinExpr: ExpressionDef | undefined) {
     this.expr = joinExpr;
     this.has({on: joinExpr});
   }
-
   get joinOn(): ExpressionDef | undefined {
     return this.expr;
   }
-
   fixupJoinOn(outer: FieldSpace, inStruct: JoinFieldDef) {
     if (this.expr === undefined) {
       return;
@@ -208,7 +195,6 @@ export class ExpressionJoin extends Join {
     inStruct.onExpression = exprX.value;
     inStruct.fieldUsage = exprX.fieldUsage;
   }
-
   getStructDef(parameterSpace: ParameterSpace): JoinFieldDef {
     const source = this.sourceExpr.getSource();
     if (!source) {
@@ -218,12 +204,10 @@ export class ExpressionJoin extends Join {
       );
       return ErrorFactory.joinDef;
     }
-
     // For joins with source arguments, we need to ensure the parameter space
     // includes parameters from the outer scope. The source arguments should
     // be able to reference parameters from the outer scope.
     let mergedParameterSpace = parameterSpace;
-
     // If this is a NamedSource with arguments, we need to merge the outer
     // parameter space with the source's parameters
     if (source instanceof NamedSource && source.args) {
@@ -242,7 +226,6 @@ export class ExpressionJoin extends Join {
             })
           );
         }
-
         // Extract parameters from the outer parameter space
         const outerParams: HasParameter[] = [];
         for (const [_name, entry] of parameterSpace.entries()) {
@@ -250,42 +233,26 @@ export class ExpressionJoin extends Join {
             outerParams.push(entry.astParam);
           }
         }
-
         // Merge parameters: outer first, then source (outer takes precedence)
         const allParams = [...outerParams, ...sourceParams];
         mergedParameterSpace = new ParameterSpace(allParams);
       }
     }
-
     // DEBUG: Log what parameter space we're passing to the source
     const sourceType = source.elementType || source.constructor.name;
     if (mergedParameterSpace) {
       const paramNames = Array.from(mergedParameterSpace.entries()).map(
         ([name]) => name
       );
-      console.log(
-        `[ExpressionJoin.getStructDef] Passing parameterSpace to ${sourceType} with params:`,
-        paramNames
-      );
     } else {
-      console.log(
-        `[ExpressionJoin.getStructDef] No parameterSpace for ${sourceType}`
-      );
     }
-
     const sourceDef = source.getSourceDef(mergedParameterSpace);
-
     // For sources that already have arguments (NamedSource with args or QuerySource),
     // don't merge outer arguments into sourceDef.arguments because they already have
     // the correct argument mapping (e.g., param2 is p)
     const hasExistingArguments =
       (source instanceof NamedSource && source.args) ||
       (sourceDef.arguments && Object.keys(sourceDef.arguments).length > 0);
-    console.log(
-      `[ExpressionJoin.getStructDef] hasExistingArguments: ${hasExistingArguments}, sourceDef.arguments:`,
-      Object.keys(sourceDef.arguments || {})
-    );
-
     if (!hasExistingArguments) {
       // Extract outer arguments from the parameter space and merge them into the sourceDef
       const outerArguments: Record<string, Argument> = {};
@@ -294,20 +261,13 @@ export class ExpressionJoin extends Join {
           outerArguments[_name] = entry.parameter();
         }
       }
-
-      console.log(
-        `[ExpressionJoin.getStructDef] Merging outer arguments:`,
-        Object.keys(outerArguments)
-      );
       // Merge outer arguments into the sourceDef's arguments
       sourceDef.arguments = {...sourceDef.arguments, ...outerArguments};
     }
-
     let matrixOperation: MatrixOperation = 'left';
     if (this.inExperiment('join_types', true)) {
       matrixOperation = this.matrixOperation;
     }
-
     if (!isJoinable(sourceDef)) {
       throw this.internalError(`Can't join struct type ${sourceDef.type}`);
     }
@@ -326,7 +286,6 @@ export class ExpressionJoin extends Join {
     return joinStruct;
   }
 }
-
 export class JoinStatement
   extends DefinitionList<Join>
   implements QueryPropertyInterface
@@ -334,21 +293,18 @@ export class JoinStatement
   elementType = 'joinStatement';
   forceQueryClass = undefined;
   queryRefinementStage = LegalRefinementStage.Single;
-
   constructor(
     joins: Join[],
     readonly accessModifier: AccessModifierLabel | undefined
   ) {
     super(joins);
   }
-
   queryExecute(executeFor: QueryBuilder) {
     for (const qel of this.list) {
       executeFor.inputFS.extendSource(qel);
       executeFor.alwaysJoins.push(qel.name.refString);
     }
   }
-
   get delarationNames(): string[] {
     return this.list.map(el => el.name.refString);
   }

@@ -4,7 +4,6 @@
  * This source code is licensed under the MIT license found in the
  *  LICENSE file in the root directory of this source tree.
  */
-
 import type {
   Annotation,
   AtomicFieldDef,
@@ -15,14 +14,12 @@ import type {
   SourceDef,
 } from '../../../model/malloy_types';
 import {isAtomic, isJoined, isSourceDef, TD} from '../../../model/malloy_types';
-
 import type {HasParameter} from '../parameters/has-parameter';
 import {AbstractParameter} from '../types/space-param';
 import type {Parameter} from '../../../model/malloy_types';
 import {Source} from './source';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import type {MalloyElement} from '../types/malloy-element';
-
 /**
  * A Source that is a virtual union of the fields of other sources, choosing
  * the first source that has all the fields at query time.
@@ -30,15 +27,12 @@ import type {MalloyElement} from '../types/malloy-element';
 export class CompositeSource extends Source {
   elementType = 'compositeSource';
   currentAnnotation?: Annotation;
-
   constructor(readonly sources: Source[]) {
     super({sources});
   }
-
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
     return this.withParameters(parameterSpace, []);
   }
-
   withParameters(
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
@@ -52,7 +46,6 @@ export class CompositeSource extends Source {
     return composeSources(sourceDefs, this, parameterSpace);
   }
 }
-
 function composeSources(
   sources: {
     sourceDef: SourceDef;
@@ -227,7 +220,6 @@ function composeSources(
         : undefined),
   };
 }
-
 function prettyType(a: FieldDef): string {
   return `\`${a.type}\``;
 }

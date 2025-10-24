@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 /**
  * Unlike a source, which is a refinement of a namespace, a query
  * is creating a new unrelated namespace. The query starts with a
@@ -28,7 +27,6 @@
  * expressions in the query is called the "input space". There is a
  * specialized QuerySpace for each type of query operation.
  */
-
 import type {AccessModifierLabel, SourceDef} from '../../../model';
 import type {AtomicFieldDeclaration} from '../query-items/field-declaration';
 import {Join} from '../source-properties/join';
@@ -37,10 +35,8 @@ import type {QueryOperationSpace} from './query-spaces';
 import {RefinedSpace} from './refined-space';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import type {SpaceEntry} from '../types/space-entry';
-
 export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   extendList: string[] = [];
-
   /**
    * Because of circularity concerns this constructor is not typed
    * properly ...
@@ -54,7 +50,6 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
   ) {
     super(input);
   }
-
   extendSource(extendField: Join | AtomicFieldDeclaration): void {
     this.pushFields(extendField);
     if (extendField instanceof Join) {
@@ -63,73 +58,47 @@ export class QueryInputSpace extends RefinedSpace implements QueryFieldSpace {
       this.extendList.push(extendField.defineName);
     }
   }
-
   isQueryFieldSpace(): this is QueryFieldSpace {
     return true;
   }
-
   outputSpace() {
     return this.queryOutput;
   }
-
   inputSpace() {
     return this;
   }
-
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
   }
-
   parameterSpace(): ParameterSpace {
-    console.log('[QueryInputSpace.parameterSpace] Called');
     const provided = this.queryOutput.parameterSpace?.();
     if (provided) {
       const paramNames = Array.from(provided.entries()).map(([name]) => name);
-      console.log(
-        '[QueryInputSpace.parameterSpace] Got from queryOutput:',
-        paramNames
-      );
       return provided;
     }
-    console.log('[QueryInputSpace.parameterSpace] Falling back to super');
     const superParam = super.parameterSpace();
     const superParamNames = Array.from(superParam.entries()).map(
       ([name]) => name
     );
-    console.log(
-      '[QueryInputSpace.parameterSpace] Super returned:',
-      superParamNames
-    );
     return superParam;
   }
-
   // Override entry() to also check the parameterSpace
   override entry(name: string): SpaceEntry | undefined {
-    console.log(`[QueryInputSpace.entry] Looking up '${name}'`);
     // First check the regular fields
     const fieldEntry = super.entry(name);
     if (fieldEntry) {
-      console.log(`[QueryInputSpace.entry] Found '${name}' in fields`);
       return fieldEntry;
     }
     // If not found in fields, check the parameter space
     const paramSpace = this.parameterSpace();
     if (paramSpace) {
-      console.log(
-        `[QueryInputSpace.entry] Checking parameterSpace for '${name}'`
-      );
       const paramEntry = paramSpace.entry(name);
       if (paramEntry) {
-        console.log(
-          `[QueryInputSpace.entry] Found '${name}' in parameterSpace`
-        );
         return paramEntry;
       }
     }
-    console.log(`[QueryInputSpace.entry] '${name}' not found anywhere`);
     return undefined;
   }
-
   isQueryOutputSpace() {
     return false;
   }

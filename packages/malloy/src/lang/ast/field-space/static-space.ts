@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {Dialect} from '../../../dialect/dialect';
 import {getDialect} from '../../../dialect/dialect_map';
 import type {
@@ -31,7 +30,6 @@ import type {
   AccessModifierLabel,
 } from '../../../model/malloy_types';
 import {isJoined, isTurtle, isSourceDef} from '../../../model/malloy_types';
-
 import type {SpaceEntry} from '../types/space-entry';
 import type {LookupResult} from '../types/lookup-result';
 import type {
@@ -48,14 +46,11 @@ import {SpaceField} from '../types/space-field';
 import {StructSpaceFieldBase} from './struct-space-field-base';
 import {ColumnSpaceField} from './column-space-field';
 import {IRViewField} from './ir-view-field';
-
 type FieldMap = Record<string, SpaceEntry>;
-
 export class StaticSpace implements FieldSpace {
   readonly type = 'fieldSpace';
   private memoMap?: FieldMap;
   protected fromStruct: StructDef;
-
   constructor(
     struct: StructDef,
     protected readonly structDialect: string,
@@ -63,15 +58,12 @@ export class StaticSpace implements FieldSpace {
   ) {
     this.fromStruct = struct;
   }
-
   dialectName(): string {
     return this.structDialect;
   }
-
   connectionName(): string {
     return this.structConnection;
   }
-
   dialectObj(): Dialect | undefined {
     try {
       return getDialect(this.structDialect);
@@ -79,7 +71,6 @@ export class StaticSpace implements FieldSpace {
       return undefined;
     }
   }
-
   defToSpaceField(from: FieldDef): SpaceField {
     if (isJoined(from)) {
       return new StructSpaceField(
@@ -92,27 +83,14 @@ export class StaticSpace implements FieldSpace {
     }
     return new ColumnSpaceField(from);
   }
-
   private get map(): FieldMap {
     if (this.memoMap === undefined) {
       this.memoMap = {};
       const spaceName = isSourceDef(this.fromStruct)
         ? this.fromStruct.name
         : 'struct';
-      console.log(
-        `[StaticSpace.map] Building map for '${spaceName}', is StaticSourceSpace: ${
-          this instanceof StaticSourceSpace
-        }, has parameterSpaceRef: ${
-          this instanceof StaticSourceSpace
-            ? !!(this as StaticSourceSpace).parameterSpaceRef
-            : 'N/A'
-        }`
-      );
       for (const f of this.fromStruct.fields) {
         const name = f.as || f.name;
-        console.log(
-          `[StaticSpace.map] Adding field '${name}', isJoined: ${isJoined(f)}`
-        );
         this.memoMap[name] = this.defToSpaceField(f);
       }
       if (isSourceDef(this.fromStruct)) {
@@ -129,36 +107,28 @@ export class StaticSpace implements FieldSpace {
     }
     return this.memoMap;
   }
-
   accessProtectionLevel(): AccessModifierLabel {
     return 'internal';
   }
-
   protected dropEntries(): void {
     this.memoMap = {};
   }
-
   protected dropEntry(name: string): void {
     delete this.map[name];
   }
-
   // TODO this was protected
   entry(name: string): SpaceEntry | undefined {
     return this.map[name];
   }
-
   protected setEntry(name: string, value: SpaceEntry): void {
     this.map[name] = value;
   }
-
   entries(): [string, SpaceEntry][] {
     return Object.entries(this.map);
   }
-
   structDef(): StructDef {
     return this.fromStruct;
   }
-
   emptyStructDef(): StructDef {
     const ret = {...this.fromStruct};
     if (isSourceDef(ret)) {
@@ -167,16 +137,13 @@ export class StaticSpace implements FieldSpace {
     ret.fields = [];
     return ret;
   }
-
   lookup(path: FieldName[], accessLevel?: AccessModifierLabel): LookupResult {
     accessLevel ??= this.accessProtectionLevel();
     const head = path[0];
     const rest = path.slice(1);
     const headName = head.refString;
-    console.log(`[StaticSpace.lookup] Looking up '${headName}'`);
     let found = this.entry(headName);
     if (!found) {
-      console.log(`[StaticSpace.lookup] NOT FOUND: '${headName}'`);
       return {
         error: {
           message: `'${head}' is not defined`,
@@ -185,7 +152,6 @@ export class StaticSpace implements FieldSpace {
         found,
       };
     }
-    console.log(`[StaticSpace.lookup] Found '${headName}'`);
     if (found instanceof SpaceField) {
       const definition = found.fieldDef();
       if (definition) {
@@ -258,12 +224,10 @@ export class StaticSpace implements FieldSpace {
     }
     return {found, error: undefined, joinPath, isOutputField: false};
   }
-
   isQueryFieldSpace(): this is QueryFieldSpace {
     return false;
   }
 }
-
 export class StructSpaceField extends StructSpaceFieldBase {
   constructor(
     def: JoinFieldDef,
@@ -273,16 +237,8 @@ export class StructSpaceField extends StructSpaceFieldBase {
   ) {
     super(def);
   }
-
   get fieldSpace(): FieldSpace {
     const isSource = isSourceDef(this.structDef);
-    console.log(
-      `[StructSpaceField.fieldSpace] Join '${
-        this.structDef.name
-      }', isSourceDef: ${isSource}, type: ${
-        this.structDef.type
-      }, has parameterSpaceRef: ${!!this.parameterSpaceRef}`
-    );
     if (isSource) {
       return new StaticSourceSpace(
         this.structDef as SourceDef,
@@ -298,7 +254,6 @@ export class StructSpaceField extends StructSpaceFieldBase {
     }
   }
 }
-
 export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
   constructor(
     protected source: SourceDef,
@@ -306,12 +261,6 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     readonly parameterSpaceRef?: ParameterSpace
   ) {
     super(source, source.dialect, source.connection);
-    console.log(
-      '[StaticSourceSpace constructor] Created with parameterSpaceRef:',
-      !!parameterSpaceRef,
-      'source name:',
-      source.name
-    );
   }
   structDef(): SourceDef {
     return this.source;
@@ -322,24 +271,12 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     ret.fields = [];
     return ret;
   }
-
   accessProtectionLevel(): AccessModifierLabel {
     return this._accessProtectionLevel;
   }
-
   // Override defToSpaceField to pass parameterSpaceRef to joins
   override defToSpaceField(from: FieldDef): SpaceField {
-    console.log(
-      `[StaticSourceSpace.defToSpaceField] Field '${
-        from.name
-      }', isJoined: ${isJoined(from)}, has parameterSpaceRef: ${!!this
-        .parameterSpaceRef}`
-    );
-
     if (isJoined(from)) {
-      console.log(
-        '[StaticSourceSpace.defToSpaceField] Creating StructSpaceField with parameterSpaceRef'
-      );
       return new StructSpaceField(
         from,
         this.structDialect,
@@ -349,30 +286,19 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     }
     return super.defToSpaceField(from);
   }
-
   // Override entry() to also check the parameterSpace
   override entry(name: string): SpaceEntry | undefined {
-    console.log(
-      `[StaticSourceSpace.entry] Looking up '${name}', has parameterSpaceRef:`,
-      !!this.parameterSpaceRef
-    );
     // First check the regular fields
     const fieldEntry = super.entry(name);
     if (fieldEntry) {
-      console.log(`[StaticSourceSpace.entry] Found '${name}' in fields`);
       return fieldEntry;
     }
     // If not found in fields, check the parameter space
     if (this.parameterSpaceRef) {
-      console.log(
-        `[StaticSourceSpace.entry] Checking parameterSpace for '${name}'`
-      );
       return this.parameterSpaceRef.entry(name);
     }
-    console.log(`[StaticSourceSpace.entry] '${name}' not found anywhere`);
     return undefined;
   }
-
   // Override lookup() to pass parameterSpaceRef when creating StructSpaceField on-the-fly
   // NOTE: This method duplicates the base class implementation to inject parameterSpaceRef
   // at line 412 when creating StructSpaceField for computed joins. The base class creates
@@ -386,10 +312,8 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     const head = path[0];
     const rest = path.slice(1);
     const headName = head.refString;
-    console.log(`[StaticSourceSpace.lookup] Looking up '${headName}'`);
     let found = this.entry(headName);
     if (!found) {
-      console.log(`[StaticSourceSpace.lookup] NOT FOUND: '${headName}'`);
       return {
         error: {
           message: `'${head}' is not defined`,
@@ -398,18 +322,10 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
         found,
       };
     }
-    console.log(`[StaticSourceSpace.lookup] Found '${headName}'`);
     if (found instanceof SpaceField) {
       const definition = found.fieldDef();
       if (definition) {
         if (!(found instanceof StructSpaceFieldBase) && isJoined(definition)) {
-          // We have looked up a field which is a join, but not a StructSpaceField
-          // because it is someting like "dimension: joinedArray is arrayComputation"
-          // which wasn't known to be a join when the fieldspace was constructed.
-          // Pass the parameterSpaceRef to ensure parameters are accessible in the join
-          console.log(
-            '[StaticSourceSpace.lookup] Creating StructSpaceField on-the-fly with parameterSpaceRef'
-          );
           found = new StructSpaceField(
             definition,
             this.structDialect,
@@ -475,7 +391,6 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     }
     return {found, error: undefined, joinPath, isOutputField: false};
   }
-
   parameterSpace(): ParameterSpace {
     if (this.parameterSpaceRef) {
       return this.parameterSpaceRef;
@@ -498,7 +413,6 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     return paramSpace;
   }
 }
-
 function accessAllowed(
   accessLevel: AccessModifierLabel,
   accessModifier: AccessModifierLabel
@@ -508,7 +422,6 @@ function accessAllowed(
   if (accessLevel === 'private') return true;
   return false;
 }
-
 function lessPermissiveAccessLevel(
   a: AccessModifierLabel,
   b: AccessModifierLabel

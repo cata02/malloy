@@ -2,7 +2,6 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
-
 import type {Connection} from '../connection/types';
 import type {Dialect} from '../dialect';
 import type {EventStream} from '../runtime_types';
@@ -18,11 +17,9 @@ import type {
 } from './malloy_types';
 import type {QueryStruct} from './query_node';
 import type {StageWriter} from './stage_writer';
-
 export interface ParentQueryModel {
   model: QueryModel;
 }
-
 export interface QueryResults {
   lastStageName: string;
   stageWriter: StageWriter;
@@ -31,7 +28,6 @@ export interface QueryResults {
   connectionName: string;
   sourceArguments?: Record<string, Argument>;
 }
-
 export interface QueryModel {
   dialect: Dialect;
   modelDef: ModelDef | undefined;
@@ -54,7 +50,10 @@ export interface QueryModel {
   addDefaultRowLimit(
     query: Query,
     defaultRowLimit?: number
-  ): {query: Query; addedDefaultRowLimit?: number};
+  ): {
+    query: Query;
+    addedDefaultRowLimit?: number;
+  };
   compileQuery(
     query: Query,
     prepareResultOptions: PrepareResultOptions | undefined,

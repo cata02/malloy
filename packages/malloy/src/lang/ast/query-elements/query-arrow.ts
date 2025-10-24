@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {Query, StructDef, Argument} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import {Source} from '../source-elements/source';
@@ -33,7 +32,6 @@ import type {View} from '../view-elements/view';
 import {checkRequiredGroupBys} from '../../composite-source-utils';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import {assignParameterSpace} from './parameter-space';
-
 /**
  * A query operation that adds segments to a LHS source or query.
  *
@@ -41,7 +39,6 @@ import {assignParameterSpace} from './parameter-space';
  */
 export class QueryArrow extends QueryBase implements QueryElement {
   elementType = 'arrow';
-
   constructor(
     readonly source: Source | QueryElement,
     readonly view: View,
@@ -57,17 +54,9 @@ export class QueryArrow extends QueryBase implements QueryElement {
       const paramNames = Array.from(parameterSpace.entries()).map(
         ([name]) => name
       );
-      console.log(
-        `[QueryArrow constructor] Created with source: ${sourceType}, parameterSpace:`,
-        paramNames
-      );
     } else {
-      console.log(
-        `[QueryArrow constructor] Created with source: ${sourceType}, NO parameterSpace`
-      );
     }
   }
-
   queryComp(isRefOk: boolean): QueryComp {
     let inputStruct: StructDef;
     let queryBase: Query;
@@ -77,15 +66,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
       // We create a fresh query with either the QOPDesc as the head,
       // the view as the head, or the scalar as the head (if scalar lenses is enabled)
       if (process.env['MALLOY_DEBUG_ARGS']) {
-        // eslint-disable-next-line no-console
-        console.log('[malloy debug] query-arrow source type', {
-          sourceType: this.source.constructor.name,
-          isRefOk,
-          hasParameterSpace: !!this.parameterSpace,
-          parameterNames: this.parameterSpace?.parameterNames() || [],
-        });
       }
-
       const invoked = isRefOk
         ? this.source.structRef(this.parameterSpace)
         : {structRef: this.source.getSourceDef(this.parameterSpace)};
@@ -117,14 +98,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
         const paramNames = Array.from(this.parameterSpace.entries()).map(
           ([name]) => name
         );
-        console.log(
-          `[QueryArrow.queryComp] Source: ${sourceType}, fieldSpace WITH parameterSpace:`,
-          paramNames
-        );
       } else {
-        console.log(
-          `[QueryArrow.queryComp] Source: ${sourceType}, fieldSpace WITHOUT parameterSpace`
-        );
       }
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment
@@ -148,37 +122,24 @@ export class QueryArrow extends QueryBase implements QueryElement {
         const paramNames = Array.from(this.parameterSpace.entries()).map(
           ([name]) => name
         );
-        console.log(
-          `[QueryArrow.queryComp] Source: ${sourceType2}, fieldSpace WITH parameterSpace:`,
-          paramNames
-        );
       } else {
-        console.log(
-          `[QueryArrow.queryComp] Source: ${sourceType2}, fieldSpace WITHOUT parameterSpace`
-        );
       }
     }
-    console.log(
-      '[QueryArrow.queryComp] Calling view.pipelineComp with fieldSpace'
-    );
     const {
       pipeline: rhsPipeline,
       annotation,
       outputStruct,
       name,
     } = this.view.pipelineComp(fieldSpace);
-
     const query = {
       ...queryBase,
       name,
       annotation,
       pipeline: [...queryBase.pipeline, ...rhsPipeline],
     };
-
     const compositeResolvedSourceDef =
       query.compositeResolvedSourceDef ??
       this.resolveCompositeSource(inputStruct, rhsPipeline);
-
     const segment = query.pipeline[0];
     if (segment !== undefined) {
       const unsatisfiedGroupBys = checkRequiredGroupBys(
@@ -197,7 +158,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         );
       }
     }
-
     const pipelineWithExpandedFieldUsage = [
       // The base query (if it exists) will already have its `expandedFieldUsage` computed
       ...queryBase.pipeline,
@@ -210,7 +170,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         rhsPipeline
       ),
     ];
-
     // Build sourceArguments for query_source:
     // - Start with any arguments provided at the query head (e.g., NamedSource.structRef -> evaluateArgumentsForRef)
     // - Prefer evaluated mappings from the inputStruct if present
@@ -240,20 +199,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         }
       }
     }
-
-    console.log('[QueryArrow.queryComp] Creating comp.query:', {
-      inputStructName: inputStruct.name,
-      inputStructType: inputStruct.type,
-      inputStructArguments: inputStruct.arguments
-        ? Object.keys(inputStruct.arguments)
-        : [],
-      sourceArgumentsKeys: Object.keys(sourceArguments),
-      sourceArgumentsHasValues: Object.entries(sourceArguments).map(
-        ([k, v]) => [k, !!(v as any).value]
-      ),
-      pipelineLength: query.pipeline.length,
-    });
-
     const comp = {
       query: {
         ...query,
@@ -265,21 +210,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
       inputStruct,
     };
     if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] QueryArrow.queryComp final comp', {
-        querySourceArguments: Object.keys(comp.query.sourceArguments || {}),
-        outputStructParameters: Object.keys(comp.outputStruct.parameters || {}),
-        queryHasSourceArguments: 'sourceArguments' in comp.query,
-        querySourceArgumentsValues: comp.query.sourceArguments,
-        querySourceArgumentsNodes: Object.fromEntries(
-          Object.entries(comp.query.sourceArguments || {}).map(
-            ([k, v]: any) => [
-              k,
-              v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
-            ]
-          )
-        ),
-      });
     }
     return comp;
   }

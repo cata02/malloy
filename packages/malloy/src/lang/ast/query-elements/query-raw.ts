@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {Query} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import type {Source} from '../source-elements/source';
@@ -28,7 +27,6 @@ import {MalloyElement} from '../types/malloy-element';
 import type {QueryComp} from '../types/query-comp';
 import type {QueryElement} from '../types/query-element';
 import type {ParameterSpace} from '../field-space/parameter-space';
-
 /**
  * A query element which represents running the intrinsic fields of a
  * source directly as a query. Currently this only works for SQL sources,
@@ -39,14 +37,12 @@ import type {ParameterSpace} from '../field-space/parameter-space';
  */
 export class QueryRaw extends MalloyElement implements QueryElement {
   elementType = 'query-raw';
-
   constructor(
     readonly source: Source,
     public parameterSpace?: ParameterSpace
   ) {
     super({source});
   }
-
   queryComp(isRefOk: boolean): QueryComp {
     const invoked = isRefOk
       ? this.source.structRef(this.parameterSpace)
@@ -65,7 +61,6 @@ export class QueryRaw extends MalloyElement implements QueryElement {
       inputStruct: structDef,
     };
   }
-
   query(): Query {
     return this.queryComp(true).query;
   }

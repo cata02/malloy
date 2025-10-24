@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type * as model from '../../../model/malloy_types';
 import type {FieldSpace} from '../types/field-space';
 import {MalloyElement} from '../types/malloy-element';
@@ -32,7 +31,6 @@ import {detectAndRemovePartialStages} from '../query-utils';
 import {ASTViewField} from '../field-space/ast-view-field';
 import type {MakeEntry} from '../types/space-entry';
 import type {ParameterSpace} from '../field-space/parameter-space';
-
 export class ViewFieldDeclaration
   extends MalloyElement
   implements Noteable, MakeEntry
@@ -41,23 +39,19 @@ export class ViewFieldDeclaration
   readonly isNoteableObj = true;
   extendNote = extendNoteMethod;
   note?: model.Annotation;
-
   constructor(
     readonly name: string,
     readonly view: View
   ) {
     super({view});
   }
-
   makeEntry(fs: DynamicSpace) {
     const qf = new ASTViewField(fs, this, this.name, fs.parameterSpace());
     fs.newEntry(this.name, this, qf);
   }
-
   getName(): string {
     return this.name;
   }
-
   getFieldDef(
     fs: FieldSpace,
     parameterSpace: ParameterSpace | undefined

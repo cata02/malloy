@@ -20,13 +20,11 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {QueryFieldDef, TurtleDef} from '../../../model/malloy_types';
 import type {ViewFieldDeclaration} from '../source-properties/view-field-declaration';
 import type {FieldSpace} from '../types/field-space';
 import {ViewField} from './view-field';
 import type {ParameterSpace} from '../field-space/parameter-space';
-
 export class ASTViewField extends ViewField {
   constructor(
     fs: FieldSpace,
@@ -36,11 +34,9 @@ export class ASTViewField extends ViewField {
   ) {
     super(fs);
   }
-
   getQueryFieldDef(fs: FieldSpace): QueryFieldDef {
     return this.view.getFieldDef(fs, this.parameterSpace);
   }
-
   private turtleDef: TurtleDef | undefined = undefined;
   fieldDef(): TurtleDef {
     if (this.turtleDef === undefined) {

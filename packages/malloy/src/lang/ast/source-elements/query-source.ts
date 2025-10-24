@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {SourceDef, QuerySourceDef} from '../../../model/malloy_types';
 import {Source} from './source';
 import type {QueryElement} from '../types/query-element';
@@ -29,13 +28,11 @@ import type {HasParameter} from '../parameters/has-parameter';
 import {AbstractParameter} from '../types/space-param';
 import {assignParameterSpace} from '../query-elements/parameter-space';
 import {v4 as uuidv4} from 'uuid';
-
 export class QuerySource extends Source {
   elementType = 'querySource';
   constructor(readonly query: QueryElement) {
     super({query});
   }
-
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
     // Extract parameters from the parameter space to pass to the query
     const pList: HasParameter[] = [];
@@ -48,7 +45,6 @@ export class QuerySource extends Source {
     }
     return this.withParameters(parameterSpace, pList);
   }
-
   withParameters(
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
@@ -58,20 +54,10 @@ export class QuerySource extends Source {
       const paramNames = Array.from(parameterSpace.entries()).map(
         ([name]) => name
       );
-      console.log(
-        '[QuerySource.withParameters] Received parameterSpace with params:',
-        paramNames
-      );
     } else {
-      console.log('[QuerySource.withParameters] No parameterSpace provided');
     }
-
     // Pass parameter space to supported query elements
     assignParameterSpace(this.query, parameterSpace);
-    console.log(
-      '[QuerySource.withParameters] Assigned parameterSpace to query element'
-    );
-
     const comp = this.query.queryComp(false);
     const queryStruct: QuerySourceDef = {
       ...comp.outputStruct,

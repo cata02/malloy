@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import {ErrorFactory} from '../error-factory';
 import type {ModelEntryReference} from '../types/malloy-element';
 import {MalloyElement} from '../types/malloy-element';
@@ -30,7 +29,6 @@ import type {Query} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import type {QueryElement} from '../types/query-element';
 import type {ParameterSpace} from '../field-space/parameter-space';
-
 /**
  * A query operation that is just a reference to an existing query.
  *
@@ -38,14 +36,12 @@ import type {ParameterSpace} from '../field-space/parameter-space';
  */
 export class QueryReference extends MalloyElement implements QueryElement {
   elementType = 'query-reference';
-
   constructor(
     readonly name: ModelEntryReference,
     public parameterSpace?: ParameterSpace
   ) {
     super();
   }
-
   queryComp(isRefOk: boolean): QueryComp {
     const headEntry = this.modelEntry(this.name);
     const query = headEntry?.entry;
@@ -89,7 +85,6 @@ export class QueryReference extends MalloyElement implements QueryElement {
     );
     return oops();
   }
-
   query(): Query {
     return this.queryComp(true).query;
   }

@@ -4,10 +4,8 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-
 import {error, errorMessage, markSource} from './test-translator';
 import './parse-expects';
-
 describe('parameters', () => {
   test('can declare parameter with no default value', () => {
     expect(`
@@ -399,24 +397,20 @@ describe('parameters', () => {
     `).toLog(errorMessage("'param' is not defined"));
   });
   test('error when declaring parameter twice', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number, ${'param::number'}) is ab
-      `
-    ).toLog(errorMessage('Cannot redefine parameter `param`'));
+      `).toLog(errorMessage('Cannot redefine parameter `param`'));
   });
   // This behavior will likely change in the future; but in the meantime, this
   // safeguards against some confusion about parameter scoping
   test('error when declaring parameter with same name as field (extended)', () => {
-    expect(
-      `
+    expect(`
         ##! experimental.parameters
         source: ab_new(ai::string) is ab extend {
           dimension: foo is upper(ai)
         }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('No matching overload for function upper(number)'),
       errorMessage(
         'Illegal shadowing of field `ai` by parameter with the same name'
@@ -424,126 +418,102 @@ describe('parameters', () => {
     );
   });
   test('can shadow field that is excepted', () => {
-    expect(
-      `
+    expect(`
         ##! experimental.parameters
         source: ab_new(ai::string) is ab extend {
           except: ai
           dimension: foo is upper(ai)
         }
-      `
-    ).toTranslate();
+      `).toTranslate();
   });
   test('error when declaring parameter with same name as field (not extended)', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(${'ai::string'}) is ab
-      `
-    ).toLog(
+      `).toLog(
       errorMessage(
         'Illegal shadowing of field `ai` by parameter with the same name'
       )
     );
   });
   test('do not inherit parameters from base source', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         source: ab_new_new is ab_new(param is 1)
         run: ab_new_new(${'param'} is 2) -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('`ab_new_new` has no declared parameter named `param`')
     );
   });
   test('error when declaring field with same name as parameter', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab extend {
           dimension: param is 1
         }
-      `
-    ).toLog(errorMessage("Cannot redefine 'param'"));
+      `).toLog(errorMessage("Cannot redefine 'param'"));
   });
   test('error when declaring parameter without experiment enabled', () => {
-    expect(
-      markSource`
+    expect(markSource`
         source: ab_new(param::number) is ab
-      `
-    ).toLog(error('experiment-not-enabled', {experimentId: 'parameters'}));
+      `).toLog(error('experiment-not-enabled', {experimentId: 'parameters'}));
   });
   test('cannot except parameter from extended source', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param_a::number) is ab
         source: ab_new_new(param_b::number) is ab_new(param_a is 1) extend {
           except: param_a
         }
-      `
-    ).toLog(errorMessage('`param_a` is not defined'));
+      `).toLog(errorMessage('`param_a` is not defined'));
   });
   test('cannot except parameter in direct extend', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab extend {
           except: param
         }
-      `
-    ).toLog(errorMessage('Illegal `except:` of parameter'));
+      `).toLog(errorMessage('Illegal `except:` of parameter'));
   });
   test('cannot accept parameter', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab extend {
           accept: param
         }
-      `
-    ).toLog(errorMessage('Illegal `accept:` of parameter'));
+      `).toLog(errorMessage('Illegal `accept:` of parameter'));
   });
   test('error when using parameter without experiment enabled', () => {
-    expect(
-      markSource`
+    expect(markSource`
         run: ab_new${'(param is param)'} -> { select: * }
-      `
-    ).toLog(error('experiment-not-enabled', {experimentId: 'parameters'}));
+      `).toLog(error('experiment-not-enabled', {experimentId: 'parameters'}));
   });
   test('parameters cannot reference themselves', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ab_new(param is ${'param'}) -> { select: * }
-      `
-    ).toLog(errorMessage('`param` is not defined'));
+      `).toLog(errorMessage('`param` is not defined'));
   });
   // This just looks like circular referencing--in reality, you cannot reference other
   // parameters in parameter arguments, hence just "xxx is not defined"
   test('error when circularly referencing mutually recursive parameters in argument', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(p_a::number, p_b::number) is ab
         run: ab_new(p_a is ${'p_b'}, p_b is ${'p_a'}) -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('`p_b` is not defined'),
       errorMessage('`p_a` is not defined')
     );
   });
   test('error when passing param with no name', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ab_new(${'1'}) -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage(
         'Parameterized source arguments must be named with `parameter_name is`'
       ),
@@ -551,77 +521,65 @@ describe('parameters', () => {
     );
   });
   test('error when passing param with incorrect name', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ab_new(${'wrong_name'} is 1, param is 2) -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('`ab_new` has no declared parameter named `wrong_name`')
     );
   });
   test('error when passing param multiple times', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ab_new(param is 1, ${'param is 2'}) -> { select: * }
-      `
-    ).toLog(errorMessage('Cannot pass argument for `param` more than once'));
+      `).toLog(errorMessage('Cannot pass argument for `param` more than once'));
   });
   test('error when not specifying argument for param with parentheses', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ${'ab_new'}() -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('Argument not provided for required parameter `param`')
     );
   });
   test('error when not specifying argument for param without parentheses', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ${'ab_new'} -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('Argument not provided for required parameter `param`')
     );
   });
   test('error when not specifying argument for param second time', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new(param::number) is ab
         run: ab_new(param is 1) -> { select: * }
         run: ${'ab_new'} -> { select: * }
-      `
-    ).toLog(
+      `).toLog(
       errorMessage('Argument not provided for required parameter `param`')
     );
   });
   test('error when referencing parameter that does not exist in join definition', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new_1(param_1::number) is ab
         source: ab_new_2(param_2::number) is ab extend {
           join_one: ab_join is ab_new_1(param_1 is ${'param_3'})
         }
-      `
-    ).toLog(errorMessage('`param_3` is not defined'));
+      `).toLog(errorMessage('`param_3` is not defined'));
   });
   test('error when referencing identifier in default param value', () => {
-    expect(
-      markSource`
+    expect(markSource`
         ##! experimental.parameters
         source: ab_new_1(param_1 is ${'ident'}) is ab
-      `
-    ).toLog(errorMessage('Only constants allowed in parameter default values'));
+      `).toLog(
+      errorMessage('Only constants allowed in parameter default values')
+    );
   });
   test('can use param in multi-stage query', () => {
     expect(`
@@ -637,7 +595,6 @@ describe('parameters', () => {
       }
     `).toTranslate();
   });
-
   // Incremental tests for parameter propagation fixes
   describe('Parameter propagation through pipeline stages', () => {
     test('should preserve parameters in QuerySpace.structDef() - single stage', () => {
@@ -652,9 +609,7 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> single_stage
       `).toTranslate();
     });
-
     // removed redundant pipeline propagation variants; covered by three-stage
-
     test('should work with parameters in join conditions across stages', () => {
       expect(`
         ##! experimental.parameters
@@ -671,7 +626,6 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> join_stage
       `).toTranslate();
     });
-
     test('should work with parameters in nested views', () => {
       expect(`
         ##! experimental.parameters
@@ -687,7 +641,6 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> nested_view
       `).toTranslate();
     });
-
     test('should work with parameters in aggregate expressions across stages', () => {
       expect(`
         ##! experimental.parameters
@@ -704,7 +657,6 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> aggregate_stage
       `).toTranslate();
     });
-
     test('should work with join_one parameterized source without pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -727,7 +679,6 @@ describe('parameters', () => {
         }
       `).toTranslate();
     });
-
     test('should work with join_one parameterized source with pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -750,7 +701,6 @@ describe('parameters', () => {
         }
       `).toTranslate();
     });
-
     test('join_one with pipeline where inner stage references param', () => {
       expect(`
         ##! experimental.parameters
@@ -772,7 +722,6 @@ describe('parameters', () => {
         }
       `).toTranslate();
     });
-
     test('join_one simple source with pipeline referencing outer param', () => {
       expect(`
         ##! experimental.parameters
@@ -790,7 +739,6 @@ describe('parameters', () => {
         }
       `).toTranslate();
     });
-
     test('should fail when parameter is not available in QueryRefine', () => {
       expect(`
         ##! experimental.parameters
@@ -807,7 +755,6 @@ describe('parameters', () => {
         run: missing_query + { where: ai = missing_param }
       `).toLog(errorMessage("'missing_param' is not defined"));
     });
-
     test('should fail when parameter is not available in QueryReference pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -824,7 +771,6 @@ describe('parameters', () => {
         run: ref_query -> { where: ai = ref_param }
       `).toLogAtLeast(errorMessage("'ref_param' is not defined"));
     });
-
     test('should fail when parameter is not available in QueryRaw pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -836,7 +782,6 @@ describe('parameters', () => {
         run: raw_param_source(raw_param is "test") -> { where: ai = raw_param }
       `).toLogAtLeast(errorMessage("'raw_param' is not defined"));
     });
-
     test('should fail when parameter is not available in QueryArrow pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -852,7 +797,6 @@ describe('parameters', () => {
         }
       `).toLog(errorMessage("'arrow_param' is not defined"));
     });
-
     test('should work with parameters in order_by across stages', () => {
       expect(`
         ##! experimental.parameters
@@ -869,7 +813,6 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> order_stage
       `).toTranslate();
     });
-
     test('wildcard should NOT include parameters', () => {
       expect(`
         ##! experimental.parameters
@@ -884,7 +827,6 @@ describe('parameters', () => {
       // This test verifies that 'my_param' does NOT appear in the wildcard expansion
       // The wildcard should only expand 'my_dimension', not parameters
     });
-
     test('parameter should be available when explicitly referenced after wildcard', () => {
       expect(`
         ##! experimental.parameters
@@ -897,7 +839,6 @@ describe('parameters', () => {
         run: test_source(my_param is '123') -> explicit_test
       `).toTranslate();
     });
-
     test('should work with parameters in three pipeline stages', () => {
       expect(`
         ##! experimental.parameters
@@ -917,7 +858,6 @@ describe('parameters', () => {
         run: test_source(param_filter is '123') -> three_stages
       `).toTranslate();
     });
-
     test('should work with parameters in last stage of three-stage pipeline', () => {
       expect(`
         ##! experimental.parameters
@@ -935,7 +875,6 @@ describe('parameters', () => {
         run: test_source(param_filter is 'test') -> last_stage_param
       `).toTranslate();
     });
-
     test('wildcard in middle stage should not include parameters', () => {
       expect(`
         ##! experimental.parameters
@@ -956,7 +895,6 @@ describe('parameters', () => {
       `).toTranslate();
     });
   });
-
   // Join-in-view scenarios: pass param to join source, use in ON, and inside join pipeline
   describe('Join-in-view with parameter usage', () => {
     test('join passes param into parameterized joined source (view stage)', () => {
@@ -975,7 +913,6 @@ describe('parameters', () => {
         run: sf(param is 'CA') -> v
       `).toTranslate();
     });
-
     test('join ON clause uses param (view stage)', () => {
       expect(`
         ##! experimental.parameters
@@ -988,7 +925,6 @@ describe('parameters', () => {
         run: sf(p is 'CA') -> v
       `).toTranslate();
     });
-
     test('join inner pipeline references param (view stage)', () => {
       expect(`
         ##! experimental.parameters
@@ -1008,7 +944,6 @@ describe('parameters', () => {
       `).toTranslate();
     });
   });
-
   // Simple test to validate parameter propagation works
   test('simple parameter propagation validation', () => {
     expect(`
@@ -1025,7 +960,6 @@ describe('parameters', () => {
       run: test_source(campaign_id_filter is '123') -> simple_test
     `).toTranslate();
   });
-
   // Test composite sources (unions) with parameters
   test.skip('composite sources with parameters', () => {
     expect(`
@@ -1043,7 +977,6 @@ describe('parameters', () => {
       }
     `).toTranslate();
   });
-
   // SQL generation tests for parameter propagation
   describe('SQL generation with parameter propagation', () => {
     test.skip('should include parameter in SQL for single stage query', async () => {
@@ -1051,26 +984,22 @@ describe('parameters', () => {
       // The functionality is verified by the translation tests above
       expect(true).toBe(true);
     });
-
     test.skip('should include parameter in SQL for multi-stage query', async () => {
       // Note: This test requires runtime setup which is not available in lang tests
       // The functionality is verified by the translation tests above
       expect(true).toBe(true);
     });
-
     test.skip('should include parameter in SQL for join conditions across stages', async () => {
       // Note: This test requires runtime setup which is not available in lang tests
       // The functionality is verified by the translation tests above
       expect(true).toBe(true);
     });
-
     test.skip('should include parameter in SQL for aggregate expressions across stages', async () => {
       // Note: This test requires runtime setup which is not available in lang tests
       // The functionality is verified by the translation tests above
       expect(true).toBe(true);
     });
   });
-
   test('can not pass parameter into source of query yet', () => {
     expect(markSource`
       ##! experimental.parameters

@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import {StaticSourceSpace} from '../field-space/static-space';
 import type {QueryComp} from '../types/query-comp';
 import type {QueryElement} from '../types/query-element';
@@ -28,7 +27,6 @@ import type {View} from '../view-elements/view';
 import {QueryBase} from './query-base';
 import type {ParameterSpace} from '../field-space/parameter-space';
 import {assignParameterSpace} from './parameter-space';
-
 /**
  * A query operation that consists of an exisitng query with refinements.
  *
@@ -36,7 +34,6 @@ import {assignParameterSpace} from './parameter-space';
  */
 export class QueryRefine extends QueryBase implements QueryElement {
   elementType = 'query-refine';
-
   constructor(
     readonly base: QueryElement,
     readonly refinement: View,
@@ -44,7 +41,6 @@ export class QueryRefine extends QueryBase implements QueryElement {
   ) {
     super({base, refinement});
   }
-
   queryComp(isRefOk: boolean): QueryComp {
     // Pass parameter space to the base query if it supports it
     assignParameterSpace(this.base, this.parameterSpace);
@@ -65,17 +61,14 @@ export class QueryRefine extends QueryBase implements QueryElement {
       ...q.query,
       pipeline,
     };
-
     const compositeResolvedSourceDef = this.resolveCompositeSource(
       q.inputStruct,
       pipeline
     );
-
     const pipelineWithExpandedFieldUsage = this.expandFieldUsage(
       compositeResolvedSourceDef ?? q.inputStruct,
       pipeline
     );
-
     return {
       query: {
         ...query,

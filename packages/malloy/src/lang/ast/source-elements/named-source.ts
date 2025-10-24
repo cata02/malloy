@@ -21,7 +21,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {
   Argument,
   Expr,
@@ -34,7 +33,6 @@ import {
   isSourceDef,
   paramHasValue,
 } from '../../../model/malloy_types';
-
 import {Source} from './source';
 import {ErrorFactory} from '../error-factory';
 import {castTo} from '../time-utils';
@@ -49,10 +47,8 @@ import {ExprIdReference} from '../expressions/expr-id-reference';
 import {ParameterSpace} from '../field-space/parameter-space';
 import type {HasParameter} from '../parameters/has-parameter';
 import {checkFilterExpression} from '../types/expression-def';
-
 export class NamedSource extends Source {
   elementType = 'namedSource';
-
   constructor(
     readonly ref: ModelEntryReference | string,
     readonly sourceArguments: Record<string, Argument> | undefined,
@@ -66,11 +62,9 @@ export class NamedSource extends Source {
       this.has({ref: ref});
     }
   }
-
   get refName(): string {
     return this.ref instanceof ModelEntryReference ? this.ref.name : this.ref;
   }
-
   structRef(parameterSpace: ParameterSpace | undefined): InvokedStructRef {
     const modelEnt = this.modelEntry(this.ref);
     // If we are not exporting the referenced structdef, don't use the reference
@@ -84,7 +78,6 @@ export class NamedSource extends Source {
       sourceArguments: this.evaluateArgumentsForRef(parameterSpace),
     };
   }
-
   refLogError<T extends MessageCode>(
     code: T,
     parameters: MessageParameterType<T>,
@@ -96,7 +89,6 @@ export class NamedSource extends Source {
       this.ref.logError(code, parameters, options);
     }
   }
-
   modelStruct(): SourceDef | undefined {
     const modelEnt = this.modelEntry(this.ref);
     const entry = modelEnt?.entry;
@@ -146,7 +138,6 @@ export class NamedSource extends Source {
       'Cannot construct a source from a never type'
     );
   }
-
   private evaluateArgumentsForRef(
     parameterSpace: ParameterSpace | undefined
   ): Record<string, Parameter> {
@@ -154,10 +145,8 @@ export class NamedSource extends Source {
     if (base === undefined) {
       return {};
     }
-
     return this.evaluateArguments(parameterSpace, base.parameters, []);
   }
-
   /**
    * Recursively resolve all parameter references in an expression tree.
    *
@@ -192,7 +181,6 @@ export class NamedSource extends Source {
       }
       return expr;
     }
-
     // Recursive case: if this node has kids, resolve them
     const exprAny = expr as any;
     if (exprAny.kids) {
@@ -210,11 +198,9 @@ export class NamedSource extends Source {
       }
       return {...exprAny, kids: resolvedKids} as Expr;
     }
-
     // If no kids, return as-is
     return expr;
   }
-
   /**
    * Try to fold constant arithmetic expressions to literal values at compile time.
    * This handles simple cases like 11 + 1 -> 12.
@@ -249,7 +235,6 @@ export class NamedSource extends Source {
       const kids = (expr as any).kids;
       const left = kids.left;
       const right = kids.right;
-
       // Both operands must be number literals
       if (
         left?.node === 'numberLiteral' &&
@@ -259,7 +244,6 @@ export class NamedSource extends Source {
       ) {
         const leftVal = Number(left.literal);
         const rightVal = Number(right.literal);
-
         if (!isNaN(leftVal) && !isNaN(rightVal)) {
           let result: number;
           switch (expr.node) {
@@ -278,7 +262,6 @@ export class NamedSource extends Source {
             default:
               return expr;
           }
-
           return {
             node: 'numberLiteral',
             literal: String(result),
@@ -286,10 +269,8 @@ export class NamedSource extends Source {
         }
       }
     }
-
     return expr;
   }
-
   private evaluateArguments(
     parameterSpace: ParameterSpace | undefined,
     parametersIn: Record<string, Parameter> | undefined,
@@ -330,7 +311,6 @@ export class NamedSource extends Source {
           parameterSpace ?? new ParameterSpace(parametersOut ?? []);
         const pVal = argument.value.getExpression(paramSpace);
         let value = pVal.value;
-
         // If the value is still a parameter reference, try to resolve it recursively
         // This handles cases like: outer(p is 'CA') -> { join: inner(param is p) }
         // where 'param is p' resolves to a parameter node that needs further resolution
@@ -354,7 +334,6 @@ export class NamedSource extends Source {
             break;
           }
         }
-
         // NEW: If the value is an expression containing parameters (not just a direct parameter reference),
         // we need to recursively resolve all parameter references within the expression tree
         if (
@@ -367,7 +346,6 @@ export class NamedSource extends Source {
           const foldedValue = this.tryFoldConstantExpr(resolvedValue);
           value = foldedValue;
         }
-
         if (
           pVal.type === 'filter expression' &&
           parameter.type === 'filter expression' &&
@@ -396,7 +374,6 @@ export class NamedSource extends Source {
         };
       }
     }
-
     for (const paramName in parametersIn) {
       if (!(paramName in outArguments)) {
         if (!paramHasValue(parametersIn[paramName])) {
@@ -407,32 +384,28 @@ export class NamedSource extends Source {
         }
       }
     }
-
     return outArguments;
   }
-
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
     return this.withParameters(parameterSpace, []);
   }
-
   withParameters(
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
   ): SourceDef {
     /*
-      Can't really generate the callback list until after all the
-      things before me are translated, and that kinda screws up
-      the translation process, so that might be a better place
-      to start the next step, because how that gets done might
-      make any code I write which ignores the translation problem
-      kind of meaningless.
+          Can't really generate the callback list until after all the
+          things before me are translated, and that kinda screws up
+          the translation process, so that might be a better place
+          to start the next step, because how that gets done might
+          make any code I write which ignores the translation problem
+          kind of meaningless.
 
-      Maybe the output of a translation is something which describes
-      all the missing data, and then there is a "link" step where you
-      can do other translations and link them into a partial translation
-      which might result in a full translation.
-    */
-
+          Maybe the output of a translation is something which describes
+          all the missing data, and then there is a "link" step where you
+          can do other translations and link them into a partial translation
+          which might result in a full translation.
+        */
     const base = this.modelStruct();
     if (!base) {
       const notFound = ErrorFactory.structDef;
@@ -441,13 +414,11 @@ export class NamedSource extends Source {
       notFound.dialect = notFound.dialect + err;
       return notFound;
     }
-
     const outParameters = {};
     for (const parameter of pList ?? []) {
       const compiled = parameter.parameter();
       outParameters[compiled.name] = compiled;
     }
-
     const outArguments = this.evaluateArguments(
       parameterSpace,
       base.parameters,
@@ -461,7 +432,6 @@ export class NamedSource extends Source {
         outArguments[paramName] = {...base.parameters[paramName]};
       }
     }
-
     const ret = {...base, parameters: outParameters, arguments: outArguments};
     this.document()?.rememberToAddModelAnnotations(ret);
     return ret;

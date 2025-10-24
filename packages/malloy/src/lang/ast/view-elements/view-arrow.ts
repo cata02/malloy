@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {PipeSegment} from '../../../model';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
 import {StaticSourceSpace} from '../field-space/static-space';
@@ -33,7 +32,6 @@ import {
   segmentTypeFromPipeSegment,
 } from '../query-elements/query-class-policy';
 import type {ParameterSpace} from '../field-space/parameter-space';
-
 /**
  * A view operation which represents adding a segment (or multiple
  * segments) to another view operation.
@@ -42,14 +40,12 @@ import type {ParameterSpace} from '../field-space/parameter-space';
  */
 export class ViewArrow extends View {
   elementType = 'viewArrow';
-
   constructor(
     readonly base: View,
     readonly operation: View
   ) {
     super({base, operation});
   }
-
   private shouldCreateNewStage(
     lastSegment: PipeSegment,
     operation: QOpDescView
@@ -60,7 +56,6 @@ export class ViewArrow extends View {
     }
     return false;
   }
-
   pipelineComp(fs: FieldSpace, parameterSpace?: ParameterSpace): PipelineComp {
     const baseComp = this.base.pipelineComp(fs, parameterSpace);
     const nextFS = new StaticSourceSpace(
@@ -68,7 +63,6 @@ export class ViewArrow extends View {
       'public',
       parameterSpace
     );
-
     // Check if the operation is a QOpDescView that needs refinement
     if (this.operation instanceof QOpDescView) {
       // Check if this is an incompatible transition that requires a new stage
@@ -77,19 +71,16 @@ export class ViewArrow extends View {
         lastSegment,
         this.operation
       );
-
       if (!needsNewStage) {
         this.operation.operation.refineFrom(lastSegment);
       }
     }
-
     const finalComp = this.operation.pipelineComp(nextFS, parameterSpace);
     return {
       pipeline: [...baseComp.pipeline, ...finalComp.pipeline],
       outputStruct: finalComp.outputStruct,
     };
   }
-
   refine(
     _inputFS: SourceFieldSpace,
     _pipeline: PipeSegment[],
@@ -102,7 +93,6 @@ export class ViewArrow extends View {
     );
     return [];
   }
-
   getImplicitName(): string | undefined {
     return this.operation.getImplicitName();
   }

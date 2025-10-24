@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import {Source} from '../source-elements/source';
 import {SourceQueryElement} from './source-query-element';
 import {QuerySource} from '../source-elements/query-source';
@@ -29,7 +28,6 @@ import type {View} from '../view-elements/view';
 import type {QueryElement} from '../types/query-element';
 import {HasParameter} from '../parameters/has-parameter';
 import {ParameterSpace} from '../field-space/parameter-space';
-
 /**
  * An expression that adds a segment to a source or query.
  * This generates a `QueryArrow`, which either creates a new query
@@ -48,9 +46,7 @@ export class SQArrow extends SourceQueryElement {
   ) {
     super({applyTo, operation});
   }
-
   getQuery(): QueryElement | undefined {
-    console.log('[SQArrow.getQuery] Called');
     const lhs = this.applyTo.isSource()
       ? this.applyTo.getSource()
       : this.applyTo.getQuery();
@@ -61,26 +57,18 @@ export class SQArrow extends SourceQueryElement {
       );
       return;
     }
-
     // Don't extract parameter space here - let QueryArrow compile the source later
     // when it has the full parameter context (including outer source parameters in joins)
     const sourceType =
       lhs instanceof Source
         ? (lhs as any).elementType || lhs.constructor.name
         : 'QueryElement';
-    console.log(
-      `[SQArrow.getQuery] LHS is: ${sourceType}, instanceof Source: ${
-        lhs instanceof Source
-      }, deferring parameter extraction to QueryArrow`
-    );
-
     // Create QueryArrow without a parameterSpace - it will be provided later
     // when the QuerySource is compiled in a join context with outer parameters
     const arr = new QueryArrow(lhs, this.operation, undefined);
     this.has({query: arr});
     return arr;
   }
-
   getSource(): Source | undefined {
     const query = this.getQuery();
     if (!query) {

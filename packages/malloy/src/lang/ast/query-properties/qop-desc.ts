@@ -20,7 +20,6 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
 import type {PipeSegment} from '../../../model/malloy_types';
 import type {QueryBuilder} from '../types/query-builder';
 import {IndexBuilder} from '../query-builders/index-builder';
@@ -39,12 +38,10 @@ import {
   isIllegalRefineTransition,
   segmentTypeFromPipeSegment,
 } from '../query-elements/query-class-policy';
-
 export class QOpDesc extends ListOf<QueryProperty> {
   elementType = 'queryOperation';
   opClass: QueryClass | undefined;
   private refineThis?: PipeSegment;
-
   protected computeType(): QueryClass | undefined {
     let guessType: QueryClass | undefined;
     let needsExplicitQueryClass = false;
@@ -86,11 +83,9 @@ export class QOpDesc extends ListOf<QueryProperty> {
     this.opClass = guessType;
     return guessType;
   }
-
   refineFrom(existing: PipeSegment): void {
     this.refineThis = existing;
   }
-
   private getBuilder(
     baseFS: SourceFieldSpace,
     isNestIn: QueryOperationSpace | undefined,
@@ -107,7 +102,6 @@ export class QOpDesc extends ListOf<QueryProperty> {
         return new PartialBuilder(baseFS, this.refineThis, isNestIn, astEl);
     }
   }
-
   getOp(
     inputFS: SourceFieldSpace,
     isNestIn: QueryOperationSpace | undefined

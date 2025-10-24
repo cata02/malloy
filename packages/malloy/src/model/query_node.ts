@@ -2,7 +2,6 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
-
 import {v4 as uuidv4} from 'uuid';
 import type {
   FieldDef,
@@ -43,7 +42,6 @@ import type {Tag} from '@malloydata/malloy-tag';
 import type {Dialect, FieldReferenceType} from '../dialect';
 import {getDialect} from '../dialect';
 import {exprMap} from './utils';
-
 abstract class QueryNode {
   readonly referenceId: string;
   constructor(referenceId?: string) {
@@ -54,98 +52,52 @@ abstract class QueryNode {
     return undefined;
   }
 }
-
 export class QueryField extends QueryNode {
   fieldDef: FieldDef;
   parent: QueryStruct;
-
   constructor(fieldDef: FieldDef, parent: QueryStruct, referenceId?: string) {
     super(referenceId);
     this.fieldDef = fieldDef;
     this.parent = parent;
     this.fieldDef = fieldDef;
   }
-
   getIdentifier() {
     return getIdentifier(this.fieldDef);
   }
-
   getJoinableParent(): QueryStruct {
     const parent = this.parent;
     const stack =
       new Error().stack?.split('\n').slice(1, 6).join('\n      ') || 'no stack';
-
-    console.log('\n  ┌─── [getJoinableParent] Called ───┐');
-    console.log('  │ Field info:', {
-      fieldName: this.fieldDef.name,
-      fieldType: this.fieldDef.type,
-      parentDefType: parent.structDef.type,
-      parentDefName: parent.structDef.name,
-    });
-    console.log('  │ Call stack:', stack);
-
-    // Log full parent chain
-    console.log('  │ Full parent chain:');
     let cur: any = parent;
     let depth = 0;
     while (cur && depth < 10) {
-      console.log(
-        `  │   [${depth}] ${cur.structDef.type}:${
-          cur.structDef.name
-        }, hasParent: ${!!cur.parent}`
-      );
       cur = cur.parent;
       depth++;
     }
-
     // Skip record parents
     if (parent.structDef.type === 'record') {
-      console.log('  │ ↻ SKIPPING record parent, recursing...');
       return parent.getJoinableParent();
     }
-
     // FIX: Skip query_source parents to avoid self-references
     // When a field's parent is a query_source (e.g., a join with a pipeline),
     // we don't want to add that query_source as a join to itself.
     // Instead, traverse up to find a proper joinable parent.
     if (parent.structDef.type === 'query_source') {
-      console.log(
-        '  │ ⚠️  SKIPPING query_source parent to avoid self-reference:',
-        parent.structDef.name
-      );
       if (parent.parent) {
-        console.log('  │ ↻ Has grandparent, recursing to get it...');
         const result = parent.getJoinableParent();
-        console.log('  │ ✓ Returning grandparent:', result.structDef.name);
-        console.log('  └──────────────────────────────────┘\n');
         return result;
       }
-      console.log(
-        "  │ ⚠️  No grandparent! Returning query_source anyway (shouldn't happen)"
-      );
       // If no grandparent, return the query_source's parent anyway
       // (this shouldn't happen in normal cases)
     }
-
-    console.log('  │ ✓ Returning parent:', {
-      returnDefType: parent.structDef.type,
-      returnDefName: parent.structDef.name,
-      returnHasParent: !!parent.parent,
-      returnParentName: parent.parent?.structDef?.name,
-    });
-    console.log('  └──────────────────────────────────┘\n');
-
     return parent;
   }
-
   isAtomic() {
     return isAtomic(this.fieldDef);
   }
-
   getFullOutputName() {
     return this.parent.getFullOutputName() + this.getIdentifier();
   }
-
   isNestedInParent(parentDef: FieldDef) {
     switch (parentDef.type) {
       case 'record':
@@ -156,50 +108,37 @@ export class QueryField extends QueryNode {
         return false;
     }
   }
-
   isArrayElement(parentDef: FieldDef) {
     return (
       parentDef.type === 'array' &&
       parentDef.elementTypeDef.type !== 'record_element'
     );
   }
-
   includeInWildcard() {
     return false;
   }
 }
-
 export abstract class QueryAtomicField<
   T extends AtomicFieldDef,
 > extends QueryField {
   fieldDef: T;
-
   constructor(fieldDef: T, parent: QueryStruct, refId?: string) {
     super(fieldDef, parent, refId);
     this.fieldDef = fieldDef; // wish I didn't have to do this
   }
-
   includeInWildcard(): boolean {
     return this.fieldDef.name !== '__distinct_key';
   }
-
   getFilterList(): FilterCondition[] {
     return [];
   }
 }
-
 export class QueryFieldBoolean extends QueryAtomicField<BooleanFieldDef> {}
-
 export class QueryFieldDate extends QueryAtomicField<DateFieldDef> {}
-
 export class QueryFieldDistinctKey extends QueryAtomicField<StringFieldDef> {}
-
 export class QueryFieldJSON extends QueryAtomicField<JSONFieldDef> {}
-
 export class QueryFieldNumber extends QueryAtomicField<NumberFieldDef> {}
-
 export class QueryFieldString extends QueryAtomicField<StringFieldDef> {}
-
 /*
  * The input to a query will always be a QueryStruct. A QueryStruct is also a namespace
  * for tracking joins, and so a QueryFieldStruct is a QueryField which has a QueryStruct.
@@ -219,125 +158,36 @@ export class QueryFieldStruct extends QueryField {
   ) {
     super(jfd, parent, referenceId);
     this.fieldDef = jfd;
-
     // DEBUG: Check if join field has arguments
     const jfdArgs = (jfd as any).arguments;
-    console.log('[QueryFieldStruct constructor] Join field arguments check:', {
-      fieldName: jfd.name,
-      fieldType: jfd.type,
-      jfdHasArguments: !!jfdArgs,
-      jfdArguments: jfdArgs ? Object.keys(jfdArgs) : [],
-      jfdArgumentValues: jfdArgs
-        ? Object.fromEntries(
-            Object.entries(jfdArgs).map(([k, v]: [string, any]) => [
-              k,
-              {
-                hasValue: !!v.value,
-                valueNode: v.value?.node,
-                valueType: typeof v.value,
-              },
-            ])
-          )
-        : {},
-      sourceArguments: sourceArguments ? Object.keys(sourceArguments) : [],
-      sourceArgumentValues: sourceArguments
-        ? Object.fromEntries(
-            Object.entries(sourceArguments).map(([k, v]: [string, any]) => [
-              k,
-              {
-                hasValue: !!v.value,
-                valueNode: v.value?.node,
-                valueType: typeof v.value,
-              },
-            ])
-          )
-        : {},
-      parentSourceArguments: parent.sourceArguments
-        ? Object.keys(parent.sourceArguments)
-        : [],
-    });
-
     if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] QueryFieldStruct constructor', {
-        fieldName: jfd.name,
-        fieldType: jfd.type,
-        sourceArguments: Object.keys(sourceArguments || {}),
-        parentSourceArguments: Object.keys(parent.sourceArguments || {}),
-        finalArgs: Object.keys(
-          (sourceArguments ?? parent.sourceArguments) || {}
-        ),
-      });
     }
-
     // Use parent.arguments() which resolves through parent chain and includes runtime values
     // This ensures join pipelines get access to runtime parameter values from the run: statement
     const finalSourceArguments = sourceArguments ?? parent.arguments();
-    console.log('[QueryFieldStruct constructor] Using arguments:', {
-      source: sourceArguments ? 'sourceArguments' : 'parent.arguments()',
-      keys: finalSourceArguments ? Object.keys(finalSourceArguments) : [],
-      values: finalSourceArguments
-        ? Object.fromEntries(
-            Object.entries(finalSourceArguments).map(
-              ([k, v]: [string, any]) => [
-                k,
-                {hasValue: !!v.value, valueNode: v.value?.node},
-              ]
-            )
-          )
-        : {},
-      parentHasArguments: !!parent.sourceArguments,
-      parentArgKeys: parent.sourceArguments
-        ? Object.keys(parent.sourceArguments)
-        : [],
-    });
-
-    console.log(
-      '[QueryFieldStruct constructor] Creating QueryStruct for join:',
-      {
-        jfdName: jfd.name,
-        jfdType: jfd.type,
-        hasQuery: !!(jfd as any).query,
-        parentName: parent.structDef.name,
-        parentType: parent.structDef.type,
-      }
-    );
-
     this.queryStruct = new QueryStruct(
       jfd,
       finalSourceArguments,
       {struct: parent},
       prepareResultOptions
     );
-
-    console.log('[QueryFieldStruct constructor] Created QueryStruct:', {
-      queryStructDefType: this.queryStruct.structDef.type,
-      queryStructHasParent: !!this.queryStruct.parent,
-      queryStructParentName: this.queryStruct.parent?.structDef.name,
-    });
   }
-
   /*
    * Proxy the field-like methods that QueryStruct implements, eventually
    * those probably should be in here ... I thought this would be important
    * but maybe it isn't, it doesn't fix the problem I am working on ...
    */
-
   getJoinableParent() {
     return this.queryStruct.getJoinableParent();
   }
-
   getFullOutputName() {
     return this.queryStruct.getFullOutputName();
   }
-
   includeInWildcard(): boolean {
     return this.isAtomic();
   }
 }
-
 export class QueryFieldTimestamp extends QueryAtomicField<TimestampFieldDef> {}
-
 export class QueryFieldUnsupported extends QueryAtomicField<NativeUnsupportedFieldDef> {}
 /*
  * When compound (arrays, records) types became atomic types, it became unclear
@@ -352,25 +202,21 @@ export class QueryFieldUnsupported extends QueryAtomicField<NativeUnsupportedFie
  * enough to look at all the calls is isBasicScalar.
  */
 export type QueryBasicField = QueryAtomicField<BasicAtomicDef>;
-
 // ============================================================================
 // QueryField utility functions (consolidated from is_* files)
 // ============================================================================
-
 export function isAggregateField(f: QueryField): boolean {
   if (f.isAtomic() && hasExpression(f.fieldDef)) {
     return expressionIsAggregate(f.fieldDef.expressionType);
   }
   return false;
 }
-
 export function isCalculatedField(f: QueryField): boolean {
   if (f.isAtomic() && hasExpression(f.fieldDef)) {
     return expressionIsCalculation(f.fieldDef.expressionType);
   }
   return false;
 }
-
 export function isScalarField(f: QueryField): boolean {
   if (f.isAtomic()) {
     if (hasExpression(f.fieldDef)) {
@@ -383,24 +229,19 @@ export function isScalarField(f: QueryField): boolean {
   }
   return false;
 }
-
 export function isBasicAggregate(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isAggregateField(f);
 }
-
 export function isBasicCalculation(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isCalculatedField(f);
 }
-
 export function isBasicScalar(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isScalarField(f);
 }
-
 // Parent interface for QueryStruct
 export interface ParentQueryStruct {
   struct: QueryStruct;
 }
-
 /*
  * So that we don't have to includeQueryModel. Put properties
  * of query model which are needed in here.
@@ -408,15 +249,12 @@ export interface ParentQueryStruct {
 export interface ModelRootInterface {
   eventStream?: EventStream;
 }
-
 export interface ParentQueryModel {
   model: ModelRootInterface;
 }
-
 function identifierNormalize(s: string) {
   return s.replace(/[^a-zA-Z0-9_]/g, '_o_');
 }
-
 /**
  * Parameter scope for tracking parameter bindings separately from structural parent chain.
  * This allows parameters to flow through query pipelines and joins without coupling
@@ -433,7 +271,6 @@ export interface ParameterScope {
     name: string;
   };
 }
-
 /** Structure object as it is used to build a query */
 export class QueryStruct {
   parent: QueryStruct | undefined;
@@ -454,35 +291,15 @@ export class QueryStruct {
   computeRecordExpression?: () => string;
   recordValue?: string;
   // Removed runtime arg bag; rely on arguments() only
-
   constructor(
     public structDef: StructDef,
     readonly sourceArguments: Record<string, Argument> | undefined,
     parent: ParentQueryStruct | ParentQueryModel,
     readonly prepareResultOptions: PrepareResultOptions
   ) {
-    console.log('[QueryStruct constructor] Creating:', {
-      structType: structDef.type,
-      structName: structDef.name,
-      parentHasStruct: 'struct' in parent,
-      parentHasModel: 'model' in parent,
-      parentStructType:
-        'struct' in parent ? parent.struct?.structDef?.type : undefined,
-      sourceArgKeys: sourceArguments ? Object.keys(sourceArguments) : [],
-    });
-
     if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] QueryStruct constructor', {
-        structName: structDef.name,
-        structType: structDef.type,
-        sourceArguments: Object.keys(sourceArguments || {}),
-        hasParent: 'struct' in parent,
-        stack: new Error().stack?.split('\n').slice(1, 4).join('\n'),
-      });
     }
     this.setParent(parent);
-
     // Initialize paramScope (separate from structural parent)
     if ('model' in parent) {
       // Root scope: no parent scope, bindings from sourceArguments
@@ -515,22 +332,18 @@ export class QueryStruct {
       this.pathAliasMap = this.root().pathAliasMap;
       this.connectionName = this.root().connectionName;
     }
-
     this.dialect = getDialect(this.findFirstDialect());
     this.addFieldsFromFieldList(structDef.fields);
   }
-
   // Injeected factory to break circularity with QueryQuery
   private static turtleFieldMaker:
     | ((field: TurtleDef, parent: QueryStruct) => QueryField)
     | undefined;
-
   static registerTurtleFieldMaker(
     maker: (field: TurtleDef, parent: QueryStruct) => QueryField
   ) {
     QueryStruct.turtleFieldMaker = maker;
   }
-
   private _modelTag: Tag | undefined = undefined;
   modelCompilerFlags(): Tag {
     if (this._modelTag === undefined) {
@@ -540,7 +353,6 @@ export class QueryStruct {
     }
     return this._modelTag;
   }
-
   protected findFirstDialect(): string {
     if (isSourceDef(this.structDef)) {
       return this.structDef.dialect;
@@ -550,7 +362,6 @@ export class QueryStruct {
     }
     throw new Error('Cannot create QueryStruct from record with model parent');
   }
-
   maybeEmitParameterizedSourceUsage() {
     if (isSourceDef(this.structDef)) {
       const paramsAndArgs = {
@@ -563,7 +374,6 @@ export class QueryStruct {
       });
     }
   }
-
   private resolveParentParameterReferences(param: Parameter): Parameter {
     return {
       ...param,
@@ -576,20 +386,6 @@ export class QueryStruct {
                   this.parent ? this.parent.arguments() : this.arguments()
                 )[frag.path[0]];
                 if (process.env['MALLOY_DEBUG_ARGS']) {
-                  // eslint-disable-next-line no-console
-                  console.log(
-                    '[malloy debug] resolveParentParameterReferences',
-                    {
-                      paramName: frag.path[0],
-                      hasParent: !!this.parent,
-                      scope: getIdentifier(this.structDef),
-                      hasResolved1: !!resolved1,
-                      currentArgs: Object.keys(this.arguments()),
-                      parentArgs: this.parent
-                        ? Object.keys(this.parent.arguments())
-                        : [],
-                    }
-                  );
                 }
                 if (!resolved1) {
                   this.eventStream?.emit('parameter-miss', {
@@ -616,7 +412,6 @@ export class QueryStruct {
             }),
     };
   }
-
   private _arguments: Record<string, Argument> | undefined = undefined;
   arguments(): Record<string, Argument> {
     if (this._arguments !== undefined) {
@@ -639,42 +434,23 @@ export class QueryStruct {
             const vv: any = (v as any)?.value;
             rawNodes[k] = vv?.node ?? (vv === null ? null : typeof vv);
           }
-          // eslint-disable-next-line no-console
-          console.log('[malloy debug] arguments incoming(raw)', {
-            scope: scopeIdentifier,
-            nodes: rawNodes,
-          });
         } catch (_e) {
           // ignore
         }
       }
-
       // Seed defaults
       for (const [name, param] of Object.entries(params)) {
         this._arguments[name] = param;
       }
-
       // Apply overrides from declared/incoming arguments with resolution of parameter references
       const resolveFromParents = (refName: string): Argument | undefined => {
         let cur: QueryStruct | undefined = this.parent;
         if (process.env['MALLOY_DEBUG_ARGS']) {
-          // eslint-disable-next-line no-console
-          console.log('[malloy debug] resolveFromParents start', {
-            scope: scopeIdentifier,
-            refName,
-            hasParent: !!this.parent,
-          });
         }
         while (cur) {
           const a = cur.arguments?.();
           const found = a?.[refName];
           if (process.env['MALLOY_DEBUG_ARGS']) {
-            // eslint-disable-next-line no-console
-            console.log('[malloy debug] resolveFromParents checking', {
-              curScope: getIdentifier(cur.structDef),
-              hasFound: !!found,
-              foundValueNode: found?.value?.node,
-            });
           }
           if (found && found.value !== null && found.value !== undefined) {
             return found;
@@ -683,7 +459,6 @@ export class QueryStruct {
         }
         return undefined;
       };
-
       if (process.env['MALLOY_DEBUG_ARGS']) {
         try {
           const ak = Object.keys(incoming);
@@ -692,17 +467,10 @@ export class QueryStruct {
             const vv: any = (v as any)?.value;
             av[k] = vv?.node ?? (vv === null ? null : typeof vv);
           }
-          // eslint-disable-next-line no-console
-          console.log('[malloy debug] arguments incoming', {
-            scope: scopeIdentifier,
-            keys: ak,
-            nodes: av,
-          });
         } catch (_e) {
           // ignore
         }
       }
-
       for (const [name, arg] of Object.entries(incoming)) {
         const v: any = (arg as any)?.value;
         if (v && v.node === 'parameter') {
@@ -732,13 +500,6 @@ export class QueryStruct {
                 }
                 cur = cur.parent;
               }
-              // eslint-disable-next-line no-console
-              console.log('[malloy debug] arguments resolve param', {
-                scope: scopeIdentifier,
-                argName: name,
-                refName: refNameDbg,
-                parentChain: chain,
-              });
             } catch (_e) {
               // ignore
             }
@@ -775,7 +536,6 @@ export class QueryStruct {
           }
         }
       }
-
       // Ensure provided sourceArguments take precedence, but only for parameters that don't have
       // a concrete value in declaredArgs. This ensures that:
       // 1. declaredArgs with concrete values take precedence over sourceArguments
@@ -787,7 +547,6 @@ export class QueryStruct {
           const declaredValue = declaredArgs[k]?.value;
           const declaredIsParamRef =
             declaredValue && (declaredValue as any).node === 'parameter';
-
           // Apply sourceArguments if:
           // 1. Parameter is not in declaredArgs, OR
           // 2. Parameter is in declaredArgs but its value is a parameter reference
@@ -798,7 +557,6 @@ export class QueryStruct {
           }
         }
       }
-
       // Final parent merge for any missing keys
       if (this.parent) {
         const parentArgs = this.parent.arguments();
@@ -815,11 +573,6 @@ export class QueryStruct {
           const vv: any = (v as any)?.value;
           valueSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
         }
-        // eslint-disable-next-line no-console
-        console.log('[malloy debug] arguments values', {
-          scope: scopeIdentifier,
-          values: valueSummary,
-        });
         try {
           const sa: any = this.sourceArguments || {};
           const saSummary: Record<string, unknown> = {};
@@ -827,11 +580,6 @@ export class QueryStruct {
             const vv: any = (v as any)?.value;
             saSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
           }
-          // eslint-disable-next-line no-console
-          console.log('[malloy debug] sourceArguments values', {
-            scope: scopeIdentifier,
-            values: saSummary,
-          });
         } catch (_e) {
           // ignore
         }
@@ -851,7 +599,6 @@ export class QueryStruct {
         this._arguments = {};
       }
     }
-
     try {
       const scope = getIdentifier(this.structDef);
       const resolvedKeys = Object.keys(this._arguments);
@@ -878,28 +625,19 @@ export class QueryStruct {
             value: vv,
           };
         }
-        // eslint-disable-next-line no-console
-        console.log('[malloy debug] arguments detailed', {
-          scope,
-          values: detailed,
-        });
       }
     } catch (_e) {
       // debug instrumentation only
     }
-
     // IMPORTANT: Update paramScope.bindings with the computed arguments
     // This ensures that child structs (like joins) can inherit the runtime parameter values
     // even if they were created before the runtime wrapper
     (this.paramScope as any).bindings = this._arguments;
-
     return this._arguments;
   }
-
   private addFieldsFromFieldList(fields: FieldDef[]) {
     for (const field of fields) {
       const as = getIdentifier(field);
-
       if (field.type === 'turtle') {
         if (!QueryStruct.turtleFieldMaker) {
           throw new Error(
@@ -924,14 +662,12 @@ export class QueryStruct {
       );
     }
   }
-
   // generate unique string for the alias.
   // return a string that can be used to represent the full
   //  join path to a struct.
   getAliasIdentifier(): string {
     const path = this.getFullOutputName();
     const ret: string | undefined = this.pathAliasMap.get(path);
-
     // make a unique alias name
     if (ret === undefined) {
       const aliases = Array.from(this.pathAliasMap.values());
@@ -948,14 +684,12 @@ export class QueryStruct {
       } else {
         throw new Error('Internal Error: cannot create unique alias name');
       }
-
       // get the malloy name for this struct (will include a trailing dot)
       // return this.getFullOutputName().replace(/\.$/, "").replace(/\./g, "_o_");
     } else {
       return ret;
     }
   }
-
   getSQLIdentifier(): string {
     if (this.unnestWithNumbers() && this.parent !== undefined) {
       const x =
@@ -968,7 +702,6 @@ export class QueryStruct {
       return this.getIdentifier();
     }
   }
-
   sqlSimpleChildReference(name: string) {
     const parentRef = this.getSQLIdentifier();
     let refType: FieldReferenceType = 'table';
@@ -986,14 +719,12 @@ export class QueryStruct {
     const childType = child?.fieldDef.type || 'unknown';
     return this.dialect.sqlFieldReference(parentRef, refType, name, childType);
   }
-
   // return the name of the field in SQL
   getIdentifier(): string {
     // if it is the root table, use provided alias if we have one.
     if (isBaseTable(this.structDef)) {
       return 'base';
     }
-
     // If this is a synthetic column, return the expression rather than the name
     // because the name will not exist. Only for records because the other types
     // will have joins and thus be in the namespace. We can't compute it here
@@ -1007,7 +738,6 @@ export class QueryStruct {
       }
       throw new Error('INTERNAL ERROR, record field alias not pre-computed');
     }
-
     // if this is an inline object, include the parents alias.
     if (this.structDef.type === 'record' && this.parent) {
       return this.parent.sqlSimpleChildReference(getIdentifier(this.structDef));
@@ -1015,7 +745,6 @@ export class QueryStruct {
     // we are somewhere in the join tree.  Make sure the alias is unique.
     return this.getAliasIdentifier();
   }
-
   // return the name of the field in Malloy
   getFullOutputName(): string {
     if (this.parent) {
@@ -1026,11 +755,9 @@ export class QueryStruct {
       return '';
     }
   }
-
   unnestWithNumbers(): boolean {
     return this.dialect.unnestWithNumbers && this.structDef.type === 'array';
   }
-
   getJoinableParent(): QueryStruct {
     // if it is inline it should always have a parent
     if (this.structDef.type === 'record') {
@@ -1042,14 +769,12 @@ export class QueryStruct {
     }
     return this;
   }
-
   addFieldToNameMap(as: string, n: QueryField) {
     if (this.nameMap.has(as)) {
       throw new Error(`Redefinition of ${as}`);
     }
     this.nameMap.set(as, n);
   }
-
   /** the the primary key or throw an error. */
   getPrimaryKeyField(fieldDef: FieldDef): QueryBasicField {
     let pk;
@@ -1059,7 +784,6 @@ export class QueryStruct {
       throw new Error(`Missing primary key for ${fieldDef}`);
     }
   }
-
   /**
    * called after all structure has been loaded.  Examine this structure to see
    * if if it is based on a query and if it is, add the output fields (unless
@@ -1075,32 +799,14 @@ export class QueryStruct {
     ) => SourceDef | undefined
   ) {
     if (this.structDef.type === 'query_source' && finalOutputStruct) {
-      console.log('[resolveQueryFields] Processing query_source:', {
-        sourceName: this.structDef.name,
-        hasParameters: !!this.structDef.parameters,
-        parameterKeys: this.structDef.parameters
-          ? Object.keys(this.structDef.parameters)
-          : [],
-        hasArguments: !!this.structDef.arguments,
-        argumentKeys: this.structDef.arguments
-          ? Object.keys(this.structDef.arguments)
-          : [],
-        queryHasSourceArgs: !!this.structDef.query.sourceArguments,
-        querySourceArgKeys: this.structDef.query.sourceArguments
-          ? Object.keys(this.structDef.query.sourceArguments)
-          : [],
-      });
-
       const resultStruct = finalOutputStruct(
         this.structDef.query,
         this.prepareResultOptions
       );
-
       // should never happen.
       if (!resultStruct) {
         throw new Error("Internal Error, query didn't produce a struct");
       }
-
       const structDef = {...this.structDef};
       for (const f of resultStruct.fields) {
         const as = getIdentifier(f);
@@ -1120,7 +826,6 @@ export class QueryStruct {
       }
     }
   }
-
   getModel(): ModelRootInterface {
     if (this.model) {
       return this.model;
@@ -1133,29 +838,12 @@ export class QueryStruct {
       return this.parent.getModel();
     }
   }
-
   get eventStream(): EventStream | undefined {
     return this.getModel().eventStream;
   }
-
   setParent(parent: ParentQueryStruct | ParentQueryModel) {
-    console.log('[QueryStruct.setParent] Called for:', {
-      thisStructType: this.structDef.type,
-      thisStructName: this.structDef.name,
-      parentHasStruct: 'struct' in parent,
-      parentHasModel: 'model' in parent,
-      parentStructType:
-        'struct' in parent ? parent.struct.structDef.type : undefined,
-      parentStructName:
-        'struct' in parent ? parent.struct.structDef.name : undefined,
-    });
-
     if ('struct' in parent) {
       this.parent = parent.struct;
-      console.log('[QueryStruct.setParent] Set this.parent to:', {
-        parentType: this.parent.structDef.type,
-        parentName: this.parent.structDef.name,
-      });
     }
     if ('model' in parent) {
       this.model = parent.model;
@@ -1163,17 +851,8 @@ export class QueryStruct {
       this.model = this.getModel();
     }
     if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-      console.log('[malloy debug] setParent', {
-        self: this.structDef.name ?? this.structDef.type,
-        hasParent: !!this.parent,
-        parentName:
-          this.parent?.structDef?.name ?? this.parent?.structDef?.type,
-        parentArgKeys: this.parent ? Object.keys(this.parent.arguments()) : [],
-      });
     }
   }
-
   /** makes a new queryable field object from a fieldDef */
   makeQueryField(field: FieldDef, referenceId?: string): QueryField {
     switch (field.type) {
@@ -1184,13 +863,6 @@ export class QueryStruct {
       case 'sql_select':
       case 'composite':
         if (process.env['MALLOY_DEBUG_ARGS']) {
-          // eslint-disable-next-line no-console
-          console.log('[malloy debug] makeQueryField', {
-            fieldName: field.name,
-            fieldType: field.type,
-            currentArgs: Object.keys(this.arguments()),
-            isJoined: 'join' in field,
-          });
         }
         return new QueryFieldStruct(
           field,
@@ -1225,11 +897,9 @@ export class QueryStruct {
         );
     }
   }
-
   root(): QueryStruct {
     return this.parent ? this.parent.root() : this;
   }
-
   primaryKey(): QueryBasicField | undefined {
     if (isSourceDef(this.structDef) && this.structDef.primaryKey) {
       return this.getDimensionByName([this.structDef.primaryKey]);
@@ -1237,22 +907,12 @@ export class QueryStruct {
       return undefined;
     }
   }
-
   getChildByName(name: string): QueryField | undefined {
     const result = this.nameMap.get(name);
     if (result && result instanceof QueryFieldStruct) {
-      console.log('[QueryStruct.getChildByName] Returning QueryFieldStruct:', {
-        name,
-        thisStructDefType: this.structDef.type,
-        thisStructDefName: this.structDef.name,
-        resultFieldDefType: result.fieldDef.type,
-        resultQueryStructDefType: result.queryStruct.structDef.type,
-        resultQueryStructHasParent: !!result.queryStruct.parent,
-      });
     }
     return result;
   }
-
   /** convert a path into a field reference */
   getFieldByName(path: string[]): QueryField {
     let found: QueryField | undefined = undefined;
@@ -1273,7 +933,6 @@ export class QueryStruct {
     }
     return found;
   }
-
   // structs referenced in queries are converted to fields.
   getQueryFieldByName(name: string[]): QueryField {
     const field = this.getFieldByName(name);
@@ -1282,7 +941,6 @@ export class QueryStruct {
     }
     return field;
   }
-
   getQueryFieldReference(f: RefToField): QueryField {
     const {path, annotation, drillExpression} = f;
     const field = this.getFieldByName(path);
@@ -1310,7 +968,6 @@ export class QueryStruct {
     }
     return field;
   }
-
   getDimensionOrMeasureByName(name: string[]) {
     const field = this.getFieldByName(name);
     if (!field.isAtomic()) {
@@ -1318,17 +975,14 @@ export class QueryStruct {
     }
     return field;
   }
-
   /** returns a query object for the given name */
   getDimensionByName(name: string[]): QueryBasicField {
     const field = this.getFieldByName(name);
-
     if (isBasicScalar(field)) {
       return field;
     }
     throw new Error(`${name} is not an atomic scalar field? Inconceivable!`);
   }
-
   /** returns a query object for the given name */
   getStructByName(name: string[]): QueryStruct {
     if (name.length === 0) {
@@ -1340,7 +994,6 @@ export class QueryStruct {
     }
     throw new Error(`Error: Path to structure not found '${name.join('.')}'`);
   }
-
   getDistinctKey(): QueryBasicField {
     if (this.structDef.type !== 'record') {
       return this.getDimensionByName(['__distinct_key']);
@@ -1350,13 +1003,11 @@ export class QueryStruct {
       throw new Error('Asking a record for a primary key? Inconceivable!');
     }
   }
-
   applyStructFiltersToTurtleDef(
     turtleDef: TurtleDef | TurtleDefPlusFilters
   ): TurtleDef {
     const pipeline = [...turtleDef.pipeline];
     const annotation = turtleDef.annotation;
-
     const addedFilters = (turtleDef as TurtleDefPlusFilters).filterList || [];
     pipeline[0] = {
       ...pipeline[0],
@@ -1365,7 +1016,6 @@ export class QueryStruct {
         isSourceDef(this.structDef) ? this.structDef.filterList || [] : []
       ),
     };
-
     const flatTurtleDef: TurtleDef = {
       type: 'turtle',
       name: turtleDef.name,
