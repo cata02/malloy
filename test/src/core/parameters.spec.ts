@@ -245,7 +245,7 @@ describe('parameters', () => {
       }
     `).malloyResultMatches(runtime, {s1: 'CA', s2: 'CA', c: 1});
   });
-  it.skip('can pass param into query definition', async () => {
+  it('can pass param into query definition', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(

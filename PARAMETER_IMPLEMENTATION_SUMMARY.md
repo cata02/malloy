@@ -2,7 +2,7 @@
 
 ## Quick Summary
 
-✅ **Status**: All 34 parameter tests passing (9 intentionally skipped)
+✅ **Status**: All 35 parameter tests passing (8 intentionally skipped)
 
 **Key Achievement**: Fixed critical parameter propagation bug that prevented parameters from being used in pipeline stages and joins.
 
@@ -11,6 +11,7 @@
 - `packages/malloy/src/lang/ast/field-space/static-space.ts` - Parameter space merging and resolution
 - `packages/malloy/src/model/join_instance.ts` - Pipeline stage recognition
 - `packages/malloy/src/lang/ast/query-elements/query-arrow.ts` - Ad-hoc query parameter propagation
+- `packages/malloy/src/lang/ast/source-elements/query-source.ts` - Query source parameter propagation
 - `test/src/core/parameters.spec.ts` - Fixed blocker test syntax
 
 **Impact**: Parameters now correctly flow through:
@@ -18,6 +19,7 @@
 - Join definitions and their pipelines
 - Nested queries and query sources
 - Ad-hoc query operations (inline views after `->`)
+- Query source definitions (parameterized queries used as sources)
 - Complex query compositions
 
 ## Overview
@@ -451,7 +453,54 @@ fieldSpace = new StaticSourceSpace(inputStruct, 'public', effectiveParamSpace);
 **Test Fixed:**
 - ✅ `string param used in group_by` - Parameters can now be used in group_by clauses of ad-hoc queries
 
-### 10. Test Updates
+### 10. Query Source Parameter Propagation
+
+**Problem:** Parameters declared on a query source were not available within the query definition itself.
+
+**Example:**
+```malloy
+source: state_facts_query(state_filter::string) is state_facts(state_filter) -> { select: * }
+//                                                              ^^^^^^^^^^^^ 'state_filter' is not defined
+```
+
+**Root Cause:** `QuerySource.withParameters()` was only passing the outer `parameterSpace` (from where the source is used) to the query, but not including the source's own declared parameters (`pList`).
+
+**Solution:** Modified `QuerySource.withParameters()` to merge the source's own parameters with the outer parameter space before passing to the query.
+
+**Location:** `packages/malloy/src/lang/ast/source-elements/query-source.ts`
+
+**Implementation:**
+```typescript
+// Added import:
+import {ParameterSpace as ParameterSpaceImpl} from '../field-space/parameter-space';
+
+// In QuerySource.withParameters():
+let effectiveParamSpace = parameterSpace;
+if (pList && pList.length > 0) {
+  // Merge outer parameters with source's own parameters
+  const allParams: HasParameter[] = [...pList];
+  if (parameterSpace) {
+    for (const [_name, entry] of parameterSpace.entries()) {
+      if (entry instanceof AbstractParameter) {
+        allParams.push(entry.astParam);
+      }
+    }
+  }
+  effectiveParamSpace = new ParameterSpaceImpl(allParams);
+}
+
+// Pass the merged parameter space to the query
+assignParameterSpace(this.query, effectiveParamSpace);
+```
+
+**Impact:** Parameters declared on query sources are now available within the query definition, enabling parameterized query sources.
+
+**Test Fixed:**
+- ✅ `can pass param into query definition` - Query sources can now reference their own parameters
+
+**Pattern:** This follows the same pattern as `StaticSourceSpace.parameterSpace()` - merging outer and source-declared parameters to create a complete parameter context.
+
+### 11. Test Updates
 
 **Location:** `test/src/core/parameters.spec.ts`
 
@@ -461,15 +510,17 @@ fieldSpace = new StaticSourceSpace(inputStruct, 'public', effectiveParamSpace);
 
 **Updated Tests:**
 - Modified `join_one` tests to add `where: filtered_facts.state is not null` to filter matched rows, preserving `LEFT JOIN` semantics
+- Unskipped `string param used in group_by` - now passes with ad-hoc query parameter propagation
+- Unskipped `can pass param into query definition` - now passes with query source parameter propagation
 
 ## Test Results
 
-✅ **All 34 parameter tests passing** (9 skipped)
+✅ **All 35 parameter tests passing** (8 skipped)
 
 ### Current Status
 - **Total Tests:** 43 tests
-- **Passing:** 34 tests (100% of non-skipped)
-- **Skipped:** 9 tests (intentionally skipped for future work)
+- **Passing:** 35 tests (100% of non-skipped)
+- **Skipped:** 8 tests (intentionally skipped for future work)
 - **Failing:** 0 tests
 
 Key tests fixed by pipeline stage parameter propagation:
@@ -546,8 +597,8 @@ The fix required changes at both the AST level (where parameters are resolved du
 ### Test Coverage Summary
 
 - **Total Tests**: 43 tests
-- **Passing**: 34 tests (100% of non-skipped)
-- **Skipped**: 9 tests (intentionally skipped - see SKIPPED_TESTS_SUMMARY.md)
+- **Passing**: 35 tests (100% of non-skipped)
+- **Skipped**: 8 tests (intentionally skipped - see SKIPPED_TESTS_SUMMARY.md)
 - **Failing**: 0 tests ✅
 
 ### Completed Fixes
@@ -558,6 +609,7 @@ The fix required changes at both the AST level (where parameters are resolved du
 4. ✅ **Fixed parameter space merging** - Outer and source parameters are correctly merged in all contexts
 5. ✅ **Fixed join-in-view blocker tests** - Corrected test syntax for proper join conditions and parameter usage
 6. ✅ **Fixed ad-hoc query parameter propagation** - Parameters passed to sources are now available in inline query operations
+7. ✅ **Fixed query source parameter propagation** - Parameters declared on query sources are now available within the query definition
 
 ### Future Work
 

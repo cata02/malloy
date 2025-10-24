@@ -24,6 +24,7 @@ import type {SourceDef, QuerySourceDef} from '../../../model/malloy_types';
 import {Source} from './source';
 import type {QueryElement} from '../types/query-element';
 import type {ParameterSpace} from '../field-space/parameter-space';
+import {ParameterSpace as ParameterSpaceImpl} from '../field-space/parameter-space';
 import type {HasParameter} from '../parameters/has-parameter';
 import {AbstractParameter} from '../types/space-param';
 import {assignParameterSpace} from '../query-elements/parameter-space';
@@ -49,15 +50,26 @@ export class QuerySource extends Source {
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
   ): SourceDef {
-    // DEBUG: Log parameter space info
-    if (parameterSpace) {
-      const paramNames = Array.from(parameterSpace.entries()).map(
-        ([name]) => name
-      );
-    } else {
+    // Create a merged parameter space that includes both:
+    // 1. The outer parameter space (from where this source is used)
+    // 2. This source's own declared parameters (pList)
+    // This allows the query to reference both outer parameters and its own parameters
+    let effectiveParamSpace = parameterSpace;
+    if (pList && pList.length > 0) {
+      // Merge outer parameters with source's own parameters
+      const allParams: HasParameter[] = [...pList];
+      if (parameterSpace) {
+        for (const [_name, entry] of parameterSpace.entries()) {
+          if (entry instanceof AbstractParameter) {
+            allParams.push(entry.astParam);
+          }
+        }
+      }
+      effectiveParamSpace = new ParameterSpaceImpl(allParams);
     }
-    // Pass parameter space to supported query elements
-    assignParameterSpace(this.query, parameterSpace);
+
+    // Pass the merged parameter space to the query
+    assignParameterSpace(this.query, effectiveParamSpace);
     const comp = this.query.queryComp(false);
     const queryStruct: QuerySourceDef = {
       ...comp.outputStruct,
