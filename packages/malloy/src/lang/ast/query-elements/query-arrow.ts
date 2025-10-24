@@ -31,7 +31,9 @@ import {QueryBase} from './query-base';
 import type {View} from '../view-elements/view';
 import {checkRequiredGroupBys} from '../../composite-source-utils';
 import type {ParameterSpace} from '../field-space/parameter-space';
+import {ParameterSpace as ParameterSpaceImpl} from '../field-space/parameter-space';
 import {assignParameterSpace} from './parameter-space';
+import {HasParameter} from '../parameters/has-parameter';
 /**
  * A query operation that adds segments to a LHS source or query.
  *
@@ -45,17 +47,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
     public parameterSpace?: ParameterSpace
   ) {
     super({source, view});
-    // DEBUG: Log QueryArrow construction
-    const sourceType =
-      source instanceof Source
-        ? (source as any).elementType || source.constructor.name
-        : 'QueryElement';
-    if (parameterSpace) {
-      const paramNames = Array.from(parameterSpace.entries()).map(
-        ([name]) => name
-      );
-    } else {
-    }
   }
   queryComp(isRefOk: boolean): QueryComp {
     let inputStruct: StructDef;
@@ -65,8 +56,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
     if (this.source instanceof Source) {
       // We create a fresh query with either the QOPDesc as the head,
       // the view as the head, or the scalar as the head (if scalar lenses is enabled)
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-      }
+
       const invoked = isRefOk
         ? this.source.structRef(this.parameterSpace)
         : {structRef: this.source.getSourceDef(this.parameterSpace)};
@@ -84,22 +74,40 @@ export class QueryArrow extends QueryBase implements QueryElement {
         parameters: structDef.parameters,
         annotation: structDef.annotation,
       };
+
+      // If we have arguments (parameter values), create a parameter space from them
+      // This allows parameters passed to a source to be available in the query operations
+      // e.g., run: state_facts(param is "foo") -> { group_by: param_val is param }
+      let effectiveParamSpace = this.parameterSpace;
+      const args = (
+        inputStruct as StructDef & {arguments?: Record<string, Argument>}
+      ).arguments;
+      if (args && Object.keys(args).length > 0) {
+        // Convert arguments to HasParameter instances
+        const paramList: HasParameter[] = [];
+        for (const [paramName, paramDef] of Object.entries(args)) {
+          paramList.push(
+            new HasParameter({
+              name: paramName,
+              typeDef: paramDef,
+              default: undefined,
+            })
+          );
+        }
+
+        // Create a new parameter space with these parameters
+        const argsParamSpace = new ParameterSpaceImpl(paramList);
+        effectiveParamSpace = argsParamSpace;
+
+        // Also assign this to the view
+        this.view.assignParameterSpace(effectiveParamSpace);
+      }
+
       fieldSpace = new StaticSourceSpace(
         inputStruct,
         'public',
-        this.parameterSpace
+        effectiveParamSpace
       );
-      // DEBUG: Log fieldSpace parameter info
-      const sourceType =
-        this.source instanceof Source
-          ? this.source.elementType || this.source.constructor.name
-          : 'QueryElement';
-      if (this.parameterSpace) {
-        const paramNames = Array.from(this.parameterSpace.entries()).map(
-          ([name]) => name
-        );
-      } else {
-      }
     } else {
       // We are adding a second stage to the given "source" query; we get the query and add a segment
       // Ensure any in-scope parameters are available to the LHS query element
@@ -116,14 +124,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
         'public',
         this.parameterSpace
       );
-      // DEBUG: Log fieldSpace parameter info
-      const sourceType2 = 'QueryElement';
-      if (this.parameterSpace) {
-        const paramNames = Array.from(this.parameterSpace.entries()).map(
-          ([name]) => name
-        );
-      } else {
-      }
     }
     const {
       pipeline: rhsPipeline,
@@ -175,11 +175,12 @@ export class QueryArrow extends QueryBase implements QueryElement {
     // - Prefer evaluated mappings from the inputStruct if present
     // - Fill missing keys from parameter definitions on the outputStruct that already have concrete values
     const sourceArguments: Record<string, Argument> = {
-      ...((queryBase as any).sourceArguments || {}),
+      ...((queryBase as Query & {sourceArguments?: Record<string, Argument>})
+        .sourceArguments || {}),
     };
-    const inputArgs = (inputStruct as any).arguments as
-      | Record<string, Argument>
-      | undefined;
+    const inputArgs = (
+      inputStruct as StructDef & {arguments?: Record<string, Argument>}
+    ).arguments;
     if (inputArgs) {
       for (const [k, v] of Object.entries(inputArgs)) {
         if (sourceArguments[k] === undefined) {
@@ -209,8 +210,6 @@ export class QueryArrow extends QueryBase implements QueryElement {
       outputStruct,
       inputStruct,
     };
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-    }
     return comp;
   }
 }

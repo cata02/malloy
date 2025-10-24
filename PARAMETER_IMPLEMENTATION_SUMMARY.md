@@ -2,7 +2,7 @@
 
 ## Quick Summary
 
-✅ **Status**: All 31 parameter tests passing (12 intentionally skipped)
+✅ **Status**: All 34 parameter tests passing (9 intentionally skipped)
 
 **Key Achievement**: Fixed critical parameter propagation bug that prevented parameters from being used in pipeline stages and joins.
 
@@ -10,11 +10,14 @@
 - `packages/malloy/src/lang/ast/field-space/refined-space.ts` - Parameter space propagation
 - `packages/malloy/src/lang/ast/field-space/static-space.ts` - Parameter space merging and resolution
 - `packages/malloy/src/model/join_instance.ts` - Pipeline stage recognition
+- `packages/malloy/src/lang/ast/query-elements/query-arrow.ts` - Ad-hoc query parameter propagation
+- `test/src/core/parameters.spec.ts` - Fixed blocker test syntax
 
 **Impact**: Parameters now correctly flow through:
 - Multi-stage pipeline views
 - Join definitions and their pipelines
 - Nested queries and query sources
+- Ad-hoc query operations (inline views after `->`)
 - Complex query compositions
 
 ## Overview
@@ -392,7 +395,63 @@ source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
 4. **Alias Naming**: Join aliases must not conflict with source names
 5. **Pipeline Operator (`->`)**: The `->` operator applies a named view to a source. For example, `source -> view_name` runs the query through the specified view. This is fundamental to Malloy's pipeline architecture.
 
-### 9. Test Updates
+### 9. Query Operation Parameter Propagation (Ad-hoc Queries)
+
+**Problem:** Parameters passed to a source in a run statement were not available in ad-hoc query operations (the inline view after `->`).
+
+**Example:**
+```malloy
+run: state_facts(param is "foo") -> { group_by: param_val is param }
+//                                                           ^^^^^ 'param' is not defined
+```
+
+**Root Cause:** When `QueryArrow` creates a query from a source with arguments (e.g., `state_facts(param is "foo")`), the arguments are stored in `inputStruct.arguments` but are not converted into a `ParameterSpace` that can be used by the view.
+
+**Solution:** Modified `QueryArrow.queryComp()` to detect when `inputStruct.arguments` contains parameter values and create a `ParameterSpace` from them.
+
+**Location:** `packages/malloy/src/lang/ast/query-elements/query-arrow.ts`
+
+**Implementation:**
+```typescript
+// Added imports:
+import {ParameterSpace as ParameterSpaceImpl} from '../field-space/parameter-space';
+import {HasParameter} from '../parameters/has-parameter';
+
+// In QueryArrow.queryComp(), after creating inputStruct:
+let effectiveParamSpace = this.parameterSpace;
+const args = (inputStruct as StructDef & {arguments?: Record<string, Argument>})
+  .arguments;
+if (args && Object.keys(args).length > 0) {
+  // Convert arguments to HasParameter instances
+  const paramList: HasParameter[] = [];
+  for (const [paramName, paramDef] of Object.entries(args)) {
+    paramList.push(
+      new HasParameter({
+        name: paramName,
+        typeDef: paramDef,
+        default: undefined,
+      })
+    );
+  }
+
+  // Create a new parameter space with these parameters
+  const argsParamSpace = new ParameterSpaceImpl(paramList);
+  effectiveParamSpace = argsParamSpace;
+
+  // Assign to the view so it can access the parameters
+  this.view.assignParameterSpace(effectiveParamSpace);
+}
+
+// Use effectiveParamSpace instead of this.parameterSpace
+fieldSpace = new StaticSourceSpace(inputStruct, 'public', effectiveParamSpace);
+```
+
+**Impact:** Parameters passed to sources in run statements are now available in ad-hoc query operations.
+
+**Test Fixed:**
+- ✅ `string param used in group_by` - Parameters can now be used in group_by clauses of ad-hoc queries
+
+### 10. Test Updates
 
 **Location:** `test/src/core/parameters.spec.ts`
 
@@ -405,12 +464,12 @@ source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
 
 ## Test Results
 
-✅ **All 33 parameter tests passing** (10 skipped)
+✅ **All 34 parameter tests passing** (9 skipped)
 
 ### Current Status
 - **Total Tests:** 43 tests
-- **Passing:** 33 tests (100% of non-skipped)
-- **Skipped:** 10 tests (intentionally skipped for future work)
+- **Passing:** 34 tests (100% of non-skipped)
+- **Skipped:** 9 tests (intentionally skipped for future work)
 - **Failing:** 0 tests
 
 Key tests fixed by pipeline stage parameter propagation:
@@ -487,8 +546,8 @@ The fix required changes at both the AST level (where parameters are resolved du
 ### Test Coverage Summary
 
 - **Total Tests**: 43 tests
-- **Passing**: 33 tests (100% of non-skipped)
-- **Skipped**: 10 tests (intentionally skipped - see SKIPPED_TESTS_SUMMARY.md)
+- **Passing**: 34 tests (100% of non-skipped)
+- **Skipped**: 9 tests (intentionally skipped - see SKIPPED_TESTS_SUMMARY.md)
 - **Failing**: 0 tests ✅
 
 ### Completed Fixes
@@ -498,6 +557,7 @@ The fix required changes at both the AST level (where parameters are resolved du
 3. ✅ **Fixed pipeline stage handling** - Pipeline stages are now properly recognized in the model layer
 4. ✅ **Fixed parameter space merging** - Outer and source parameters are correctly merged in all contexts
 5. ✅ **Fixed join-in-view blocker tests** - Corrected test syntax for proper join conditions and parameter usage
+6. ✅ **Fixed ad-hoc query parameter propagation** - Parameters passed to sources are now available in inline query operations
 
 ### Future Work
 

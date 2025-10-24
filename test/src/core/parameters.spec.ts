@@ -29,7 +29,7 @@ describe('parameters', () => {
       run: state_facts(param is 1) -> { group_by: param_plus_one }
     `).malloyResultMatches(runtime, {param_plus_one: 2});
   });
-  it.skip('string param used in group_by', async () => {
+  it('string param used in group_by', async () => {
     await expect(`
       ##! experimental.parameters
       source: state_facts(param::string) is duckdb.table('malloytest.state_facts') extend {
