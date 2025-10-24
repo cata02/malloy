@@ -38,7 +38,7 @@ import type {
   QueryFieldSpace,
   SourceFieldSpace,
 } from '../types/field-space';
-import {DefinedParameter} from '../types/space-param';
+import {DefinedParameter, AbstractParameter} from '../types/space-param';
 import type {ParameterSpace} from './parameter-space';
 import {ParameterSpace as ParameterSpaceImpl} from './parameter-space';
 import {HasParameter} from '../parameters/has-parameter';
@@ -286,6 +286,7 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     }
     return super.defToSpaceField(from);
   }
+
   // Override entry() to also check the parameterSpace
   override entry(name: string): SpaceEntry | undefined {
     // First check the regular fields
@@ -294,11 +295,16 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
       return fieldEntry;
     }
     // If not found in fields, check the parameter space
-    if (this.parameterSpaceRef) {
-      return this.parameterSpaceRef.entry(name);
+    const paramSpace = this.parameterSpace();
+    if (paramSpace) {
+      const paramEntry = paramSpace.entry(name);
+      if (paramEntry) {
+        return paramEntry;
+      }
     }
     return undefined;
   }
+
   // Override lookup() to pass parameterSpaceRef when creating StructSpaceField on-the-fly
   // NOTE: This method duplicates the base class implementation to inject parameterSpaceRef
   // at line 412 when creating StructSpaceField for computed joins. The base class creates
@@ -393,7 +399,31 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
   }
   parameterSpace(): ParameterSpace {
     if (this.parameterSpaceRef) {
-      return this.parameterSpaceRef;
+      // Merge the passed-in parameter space with the source's own parameters
+      const sourceParameters: HasParameter[] = [];
+      if (this.source.parameters) {
+        for (const [paramName, paramDef] of Object.entries(
+          this.source.parameters
+        )) {
+          sourceParameters.push(
+            new HasParameter({
+              name: paramName,
+              typeDef: paramDef,
+              default: undefined,
+            })
+          );
+        }
+      }
+      // Extract parameters from the passed-in parameter space
+      const outerParameters: HasParameter[] = [];
+      for (const [_name, entry] of this.parameterSpaceRef.entries()) {
+        if (entry instanceof AbstractParameter) {
+          outerParameters.push(entry.astParam);
+        }
+      }
+      // Merge parameters: outer first, then source (outer takes precedence)
+      const allParams = [...outerParameters, ...sourceParameters];
+      return new ParameterSpaceImpl(allParams);
     }
     const parameters: HasParameter[] = [];
     if (this.source.parameters) {

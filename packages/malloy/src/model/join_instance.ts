@@ -44,6 +44,10 @@ export class JoinInstance {
       return 'root';
     }
     const thisStruct = this.queryStruct.structDef;
+    // Pipeline stages (type: 'finalize') are not joins, treat them as root
+    if (thisStruct.type === 'finalize') {
+      return 'root';
+    }
     if (isJoined(thisStruct)) {
       switch (thisStruct.join) {
         case 'one':

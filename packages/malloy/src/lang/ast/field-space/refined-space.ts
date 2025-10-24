@@ -34,6 +34,8 @@ import {DynamicSpace} from './dynamic-space';
 import {canMakeEntry} from '../types/space-entry';
 import type {MalloyElement} from '../types/malloy-element';
 import type {ParameterSpace} from './parameter-space';
+import {AbstractParameter} from '../types/space-param';
+import type {HasParameter} from '../parameters/has-parameter';
 import {RenameSpaceField} from './rename-space-field';
 import {SpaceField} from '../types/space-field';
 import {
@@ -57,6 +59,17 @@ export class RefinedSpace extends DynamicSpace {
       ...from,
       fields: editJoinsFromIncludeState([], from, includeState),
     });
+
+    // Add parameters from the passed-in parameter space
+    if (parameters) {
+      const paramList: HasParameter[] = [];
+      for (const [_name, entry] of parameters.entries()) {
+        if (entry instanceof AbstractParameter) {
+          paramList.push(entry.astParam);
+        }
+      }
+      edited.addParameters(paramList);
+    }
     const renameMap = new Map<
       string,
       {as: string; location: DocumentLocation; logTo: MalloyElement}

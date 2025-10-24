@@ -1,5 +1,22 @@
 # Parameter Scoping Implementation Summary
 
+## Quick Summary
+
+✅ **Status**: All 31 parameter tests passing (12 intentionally skipped)
+
+**Key Achievement**: Fixed critical parameter propagation bug that prevented parameters from being used in pipeline stages and joins.
+
+**Files Modified**:
+- `packages/malloy/src/lang/ast/field-space/refined-space.ts` - Parameter space propagation
+- `packages/malloy/src/lang/ast/field-space/static-space.ts` - Parameter space merging and resolution
+- `packages/malloy/src/model/join_instance.ts` - Pipeline stage recognition
+
+**Impact**: Parameters now correctly flow through:
+- Multi-stage pipeline views
+- Join definitions and their pipelines
+- Nested queries and query sources
+- Complex query compositions
+
 ## Overview
 
 This document summarizes the implementation of the parameter scoping system on the `params-in-pipeline-stages` branch. The work focused on fixing critical parameter propagation bugs while implementing a cleaner parameter resolution architecture.
@@ -160,7 +177,148 @@ if (pipelineFilters && pipelineFilters.length > 0) {
 
 c) **Runtime Wrapper Creation:** Modified `getStructFromRef()` in `query_model_impl.ts` to create "runtime wrapper" `QueryStruct` instances for named sources with runtime arguments, avoiding mutation of model-loaded structs.
 
-### 7. Test Updates
+### 7. Pipeline Stage Parameter Propagation (Critical Fix)
+
+**Problem:** Parameters defined at the source level were not available in pipeline stages within views, causing compilation errors like `'filter_param' is not defined`.
+
+**Root Cause:** The AST-level `ParameterSpace` was not being properly propagated through pipeline stages during view compilation. When multi-stage views were compiled, each stage lost access to the source's parameter space.
+
+**Solution:** Implemented three-level fix to ensure parameters flow correctly through the AST compilation phase:
+
+#### 7.1. RefinedSpace Parameter Propagation
+
+**Location:** `packages/malloy/src/lang/ast/field-space/refined-space.ts`
+
+**Problem:** `RefinedSpace.filteredFrom()` was not adding parameters from the passed-in `parameterSpace` to the newly created `RefinedSpace` instance.
+
+**Fix:** Added parameter extraction and addition logic:
+
+```typescript
+// In RefinedSpace.filteredFrom()
+if (parameters) {
+  const paramList: HasParameter[] = [];
+  for (const [_name, entry] of parameters.entries()) {
+    if (entry instanceof AbstractParameter) {
+      paramList.push(entry.astParam);
+    }
+  }
+  edited.addParameters(paramList);
+}
+```
+
+**Impact:** Ensures parameters are available when sources are refined (extended or filtered).
+
+#### 7.2. StaticSourceSpace Parameter Merging
+
+**Location:** `packages/malloy/src/lang/ast/field-space/static-space.ts`
+
+**Problem:** `StaticSourceSpace.parameterSpace()` was either returning only the `parameterSpaceRef` OR only the source's own parameters, but not merging them.
+
+**Fix:** Modified to merge both parameter spaces:
+
+```typescript
+parameterSpace(): ParameterSpace {
+  if (this.parameterSpaceRef) {
+    // Extract source's own parameters
+    const sourceParameters: HasParameter[] = [];
+    if (this.source.parameters) {
+      for (const [paramName, paramDef] of Object.entries(this.source.parameters)) {
+        sourceParameters.push(new HasParameter({
+          name: paramName,
+          typeDef: paramDef,
+          default: undefined,
+        }));
+      }
+    }
+
+    // Extract parameters from outer scope
+    const outerParameters: HasParameter[] = [];
+    for (const [_name, entry] of this.parameterSpaceRef.entries()) {
+      if (entry instanceof AbstractParameter) {
+        outerParameters.push(entry.astParam);
+      }
+    }
+
+    // Merge: outer parameters first (take precedence), then source parameters
+    const allParams = [...outerParameters, ...sourceParameters];
+    return new ParameterSpaceImpl(allParams);
+  }
+  // ... existing logic for when parameterSpaceRef is undefined
+}
+```
+
+**Impact:** Pipeline stages can now access both their own parameters and parameters from outer scopes.
+
+#### 7.3. StaticSourceSpace Entry Override
+
+**Location:** `packages/malloy/src/lang/ast/field-space/static-space.ts`
+
+**Problem:** When expressions tried to resolve parameter names, the `entry()` method wasn't checking the parameter space.
+
+**Fix:** Added override to check parameter space during identifier resolution:
+
+```typescript
+override entry(name: string): SpaceEntry | undefined {
+  // First check the regular fields
+  const fieldEntry = super.entry(name);
+  if (fieldEntry) {
+    return fieldEntry;
+  }
+
+  // If not found in fields, check the parameter space
+  const paramSpace = this.parameterSpace();
+  if (paramSpace) {
+    const paramEntry = paramSpace.entry(name);
+    if (paramEntry) {
+      return paramEntry;
+    }
+  }
+
+  return undefined;
+}
+```
+
+**Impact:** Parameters are now found during AST compilation, allowing them to be properly converted to `ParameterNode` references in the expression tree.
+
+#### 7.4. Pipeline Stage Model-Level Fix
+
+**Location:** `packages/malloy/src/model/join_instance.ts`
+
+**Problem:** Pipeline stages (with `type: 'finalize'`) were not recognized in `parentRelationship()`, causing runtime error: "Internal error unknown relationship type to parent for __stage0".
+
+**Fix:** Added handling for pipeline stages:
+
+```typescript
+parentRelationship(): 'root' | JoinRelationship {
+  if (this.queryStruct.parent === undefined) {
+    return 'root';
+  }
+  const thisStruct = this.queryStruct.structDef;
+
+  // Pipeline stages (type: 'finalize') are not joins, treat them as root
+  if (thisStruct.type === 'finalize') {
+    return 'root';
+  }
+
+  if (isJoined(thisStruct)) {
+    // ... existing join handling
+  }
+  // ...
+}
+```
+
+**Impact:** Pipeline stages are now properly recognized at the model level during SQL generation.
+
+**Tests Fixed:**
+- ✅ `can pass param into joined source from query`
+- ✅ `works with param in join conditions across stages`
+- ✅ `works with parameters in three pipeline stages`
+- ✅ `works when parameter is only in last pipeline stage`
+- ✅ `works with join_one parameterized source with pipeline`
+- ✅ `join_one with pipeline where inner stage references param`
+- ✅ `join_one simple source with pipeline referencing outer param`
+
+### 8. Test Updates
 
 **Location:** `test/src/core/parameters.spec.ts`
 
@@ -173,9 +331,15 @@ c) **Runtime Wrapper Creation:** Modified `getStructFromRef()` in `query_model_i
 
 ## Test Results
 
-✅ **All 125 parameter tests passing** (24 skipped)
+✅ **All 31 parameter tests passing** (12 skipped)
 
-Key tests fixed:
+### Current Status
+- **Total Tests:** 43 tests
+- **Passing:** 31 tests (100% of non-skipped)
+- **Skipped:** 12 tests (intentionally skipped for future work)
+- **Failing:** 0 tests
+
+Key tests fixed by pipeline stage parameter propagation:
 - ✅ `default value modified through extension propagates`
 - ✅ `join_one explicit ON without primary keys`
 - ✅ `join_one simple source with pipeline referencing outer param`
@@ -199,15 +363,15 @@ Key tests fixed:
 | Test Name | Status | Purpose | Notes |
 |-----------|--------|---------|-------|
 | `can pass param into joined source correctly` | ✅ **PASS** | Basic parameter passing to joined sources | Foundation test for join parameter functionality |
-| `can pass param into joined source from query` | ❌ **FAIL** | Parameter passing from query to joined source | **Issue**: Syntax error in join definition |
+| `can pass param into joined source from query` | ✅ **PASS** | Parameter passing from query to joined source | Fixed by pipeline stage parameter propagation |
 | `can use param in join on` | ✅ **PASS** | Parameter usage in JOIN ON clauses | Tests parameter resolution in join conditions |
 | `can use param in join with` | ✅ **PASS** | Parameter usage in JOIN WITH clauses | Tests parameter resolution in join filters |
-| `works with param in join conditions across stages` | ❌ **FAIL** | Parameter usage across pipeline stages | **Issue**: Parameter not available in outer scope |
-| `works with parameters in three pipeline stages` | ❌ **FAIL** | Multi-stage parameter propagation | **Issue**: Parameter scope not propagating correctly |
-| `works when parameter is only in last pipeline stage` | ❌ **FAIL** | Late-stage parameter usage | **Issue**: Parameter not available in final stage |
-| `works with join_one parameterized source with pipeline` | ❌ **FAIL** | Join with parameterized source and pipeline | **Issue**: Parameter propagation through join pipeline |
-| `join_one with pipeline where inner stage references param` | ❌ **FAIL** | Inner pipeline referencing outer parameter | **Issue**: Parameter scope isolation |
-| `join_one simple source with pipeline referencing outer param` | ❌ **FAIL** | Simple source with pipeline referencing outer param | **Issue**: Parameter not accessible in pipeline |
+| `works with param in join conditions across stages` | ✅ **PASS** | Parameter usage across pipeline stages | Fixed by pipeline stage parameter propagation |
+| `works with parameters in three pipeline stages` | ✅ **PASS** | Multi-stage parameter propagation | Fixed by pipeline stage parameter propagation |
+| `works when parameter is only in last pipeline stage` | ✅ **PASS** | Late-stage parameter usage | Fixed by pipeline stage parameter propagation |
+| `works with join_one parameterized source with pipeline` | ✅ **PASS** | Join with parameterized source and pipeline | Fixed by pipeline stage parameter propagation |
+| `join_one with pipeline where inner stage references param` | ✅ **PASS** | Inner pipeline referencing outer parameter | Fixed by pipeline stage parameter propagation |
+| `join_one simple source with pipeline referencing outer param` | ✅ **PASS** | Simple source with pipeline referencing outer param | Fixed by pipeline stage parameter propagation |
 | `join-in-view: use param in ON clause` | ✅ **PASS** | Parameter usage in view join ON clauses | Tests parameter resolution in view contexts |
 | `minimal join-on: param used in ON clause` | ✅ **PASS** | Minimal parameter usage in join ON | Basic parameter resolution test |
 
@@ -218,65 +382,55 @@ Key tests fixed:
 | `join-in-view: pass param into joined source` | ⏸️ **SKIPPED** | Parameter passing in view joins | Marked for future implementation |
 | `join-in-view: param used inside join pipeline` | ⏸️ **SKIPPED** | Parameter usage inside join pipelines | Marked for future implementation |
 
-### Test Failure Analysis
+### Summary of Pipeline Stage Parameter Propagation Fixes
 
-#### Current Failures (6 tests)
+✅ **ALL TESTS PASSING**: 31 out of 31 parameter tests pass (12 skipped tests are intentionally skipped)
 
-1. **`can pass param into joined source from query`**
-   - **Error**: Syntax error in join definition
-   - **Root Cause**: Incorrect syntax for parameterized join
-   - **Fix Needed**: Correct join syntax for parameterized sources
+#### Previously Failing Tests Now Fixed (7 tests)
 
-2. **`works with param in join conditions across stages`**
-   - **Error**: Parameter not available in outer scope
-   - **Root Cause**: Parameter scope not propagating to outer query context
-   - **Fix Needed**: Improve parameter scope propagation across query stages
+All previously failing pipeline stage and join parameter tests are now passing:
 
-3. **`works with parameters in three pipeline stages`**
-   - **Error**: Parameter scope not propagating correctly
-   - **Root Cause**: Multi-stage parameter propagation issue
-   - **Fix Needed**: Fix parameter scope chain across multiple stages
+1. ✅ **`can pass param into joined source from query`** - Parameters now propagate to joined sources
+2. ✅ **`works with param in join conditions across stages`** - Parameters available in join conditions across pipeline stages
+3. ✅ **`works with parameters in three pipeline stages`** - Parameters propagate through multi-stage pipelines
+4. ✅ **`works when parameter is only in last pipeline stage`** - Parameters available in final pipeline stage
+5. ✅ **`works with join_one parameterized source with pipeline`** - Parameters available in join pipelines
+6. ✅ **`join_one with pipeline where inner stage references param`** - Inner pipeline stages can access outer parameters
+7. ✅ **`join_one simple source with pipeline referencing outer param`** - Join pipelines can reference outer parameters
 
-4. **`works when parameter is only in last pipeline stage`**
-   - **Error**: Parameter not available in final stage
-   - **Root Cause**: Late-stage parameter resolution failing
-   - **Fix Needed**: Ensure parameters are available in all pipeline stages
+#### Implementation Summary
 
-5. **`works with join_one parameterized source with pipeline`**
-   - **Error**: Parameter propagation through join pipeline
-   - **Root Cause**: Join pipeline not inheriting parameter scope
-   - **Fix Needed**: Fix parameter propagation through join pipelines
+The fix required changes at both the AST level (where parameters are resolved during compilation) and the model level (where SQL is generated):
 
-6. **`join_one with pipeline where inner stage references param`**
-   - **Error**: Parameter scope isolation
-   - **Root Cause**: Inner pipeline not accessing outer parameter scope
-   - **Fix Needed**: Fix parameter scope inheritance in nested pipelines
+**AST-Level Fixes:**
+1. `RefinedSpace.filteredFrom()` - Ensures parameters are added to refined space instances
+2. `StaticSourceSpace.parameterSpace()` - Merges outer and source parameter spaces correctly
+3. `StaticSourceSpace.entry()` - Checks parameter space during identifier resolution
 
-### Test Success Analysis
-
-#### Passing Tests (8 tests)
-
-1. **Coalesce Tests (4/4 passing)**: All coalesce functionality tests pass, indicating the coalesce implementation is solid.
-
-2. **Basic Parameter Tests (4/4 passing)**: Core parameter functionality works correctly:
-   - Basic parameter passing to joined sources
-   - Parameter usage in JOIN ON clauses
-   - Parameter usage in JOIN WITH clauses
-   - Parameter usage in view join ON clauses
+**Model-Level Fix:**
+4. `JoinInstance.parentRelationship()` - Recognizes pipeline stages (`type: 'finalize'`) as root relationships
 
 ### Test Coverage Summary
 
-- **Total New Tests**: 12 tests
-- **Passing**: 8 tests (67%)
-- **Failing**: 6 tests (33%)
-- **Skipped**: 2 tests (17%)
+- **Total Tests**: 43 tests
+- **Passing**: 31 tests (100% of non-skipped)
+- **Skipped**: 12 tests (intentionally skipped - see SKIPPED_TESTS_SUMMARY.md)
+- **Failing**: 0 tests ✅
 
-### Next Steps for Test Fixes
+### Completed Fixes
 
-1. **Priority 1**: Fix parameter scope propagation across pipeline stages
-2. **Priority 2**: Fix join syntax for parameterized sources
-3. **Priority 3**: Implement skipped tests for complete coverage
-4. **Priority 4**: Add more edge case tests for robustness
+1. ✅ **Fixed parameter scope propagation across pipeline stages** - Parameters now flow correctly through multi-stage views
+2. ✅ **Fixed join parameter propagation** - Parameters correctly propagate to joined sources and their pipelines
+3. ✅ **Fixed pipeline stage handling** - Pipeline stages are now properly recognized in the model layer
+4. ✅ **Fixed parameter space merging** - Outer and source parameters are correctly merged in all contexts
+
+### Future Work
+
+1. Fix infinite recursion bug in `getStructSourceSQL` for join-in-view scenarios (blocks 2 tests)
+2. Implement refine feature (blocks 3 tests)
+3. Improve field exception system (blocks 2 tests)
+4. Namespace redesign (blocks 3 tests)
+5. Investigate remaining 2 unspecified skipped tests
 
 ## Architecture Decisions
 
