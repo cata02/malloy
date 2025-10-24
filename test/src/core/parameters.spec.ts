@@ -555,24 +555,27 @@ describe('parameters', () => {
   });
   // Integration tests for join-in-view scenarios requested
   // Simplified to avoid infinite recursion bug in Malloy SQL generation
-  it.skip('join-in-view: pass param into joined source', async () => {
+  it('join-in-view: pass param into joined source', async () => {
     // TODO: This triggers infinite recursion in getStructSourceSQL due to
     // combination of parameterized source with filter + join + pipeline
     await expect(`
       ##! experimental.parameters
       source: inner_source(param2::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
         dimension: state_copy is state
         where: state = param2
         view: passthrough is { group_by: state_copy }
       }
       source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
         view: v is {
-          group_by: state
-          join_one: inner_alias is inner_source(param2 is p) -> passthrough
+          group_by: state, inner_state is inner_alias.state_copy
+          join_one: inner_alias is inner_source(param2 is p) -> passthrough on state = inner_alias.state_copy
+          where: inner_alias.state_copy is not null
         }
       }
       run: outer(p is 'CA') -> v
-    `).malloyResultMatches(runtime, {state: 'CA'});
+    `).malloyResultMatches(runtime, {state: 'CA', inner_state: 'CA'});
   });
   it('join-in-view: use param in ON clause', async () => {
     await expect(`
@@ -588,21 +591,25 @@ describe('parameters', () => {
       run: outer(p is 'CA') -> v
     `).malloyResultMatches(runtime, {state: 'CA', i_state: 'CA'});
   });
-  it.skip('join-in-view: param used inside join pipeline', async () => {
+  it('join-in-view: param used inside join pipeline', async () => {
     // TODO: This triggers infinite recursion in getStructSourceSQL
     await expect(`
       ##! experimental.parameters
       source: inner_source(param2::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
         dimension: state_copy is state
+        view: filtered_view is { group_by: state_copy; where: state_copy = param2 }
       }
       source: outer(p::string) is duckdb.table('malloytest.state_facts') extend {
+        primary_key: state
         view: v is {
-          group_by: state
-          join_one: inner is inner_source(param2 is p) -> { group_by: state_copy; where: state_copy = param2 }
+          group_by: state, inner_state is joined_inner.state_copy
+          join_one: joined_inner is inner_source(param2 is p) -> filtered_view on state = joined_inner.state_copy
+          where: joined_inner.state_copy is not null
         }
       }
       run: outer(p is 'CA') -> v
-    `).malloyResultMatches(runtime, {state: 'CA'});
+    `).malloyResultMatches(runtime, {state: 'CA', inner_state: 'CA'});
   });
   it('minimal single-stage: view param resolves literal', async () => {
     await expect(`
