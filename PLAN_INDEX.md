@@ -69,7 +69,7 @@ Combines the best ideas from previous iterations:
 - `PARAMETER_FEATURES_INVENTORY.md` - Feature catalog
 - `SKIPPED_TESTS_SUMMARY.md` - Tests not passing on working branch
 
-**Note**: Architecture clarifications (why Model must handle late binding) are now integrated into the main plan (lines 85-110).
+**Note**: Architecture clarifications (why Model must handle late binding) are now integrated into the main plan (see the Architecture section).
 
 ### Setup & Configuration
 - `POSTGRES_SETUP_CHANGES.md` - PostgreSQL port changes (5433)
@@ -119,7 +119,7 @@ Combines the best ideas from previous iterations:
 **Future**: Extract Namespace base class (per maintainer suggestion)
 **Document**: Iteration 1.1 in V5 plan
 
-**Decision**: AST merges parameter visibility at boundaries, Model resolves at runtime
+**Decision**: AST merges parameter visibility at boundaries; Model resolves at runtime
 **Rationale**:
 - AST: Merge-based visibility (outer + local), write metadata to IR
 - Model: Single source of truth for runtime resolution (param-refs, precedence, overrides)
@@ -127,7 +127,8 @@ Combines the best ideas from previous iterations:
 
 **Why Not Parent-Chain**: Lower complexity, fewer files touched, lower review burden
 **Why Model Must Resolve**: Cross-boundary references, parent inheritance, runtime precedence
-**Document**: V5 plan architecture section (lines 85-110)
+**Tests**: Precedence tests and cross‑dialect smoke tests added in Level 1
+**Document**: See Architecture section in the main plan
 
 **Decision**: Write parameters to IR (SourceDef.parameters)
 **Rationale**: Clear contract between layers

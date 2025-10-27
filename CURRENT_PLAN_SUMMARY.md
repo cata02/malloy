@@ -60,6 +60,11 @@ Each level adds one major feature, complete end-to-end:
 
 **Total**: 24.5-34.5 hours, ~128 tests
 
+### Architecture split (concise)
+
+- AST: merge-based parameter visibility at boundaries (outer + local), constant folding, type checks, writes metadata to IR. No parent chains, no runtime binding.
+- Model: single source of truth for resolution at runtime (late binding via QueryStruct parent chain, inheritance, and precedence rules).
+
 ### 2. Micro-Iterations (15-30 min cycles)
 
 Within each level, tiny iterations with fast feedback:
@@ -162,7 +167,7 @@ it('can use parameter', async () => {
 
 ### Iteration 1.7 (30 min): Cross-Dialect Smoke Tests
 **Test**: Validate SQL across dialects
-- DuckDB, PostgreSQL, number formatting
+- DuckDB (always), PostgreSQL (gated by MALLOY_DATABASES), number formatting
 - Catch quoting/formatting issues early
 **Result**: 19 tests passing ✅
 
@@ -242,6 +247,11 @@ We keep the good idea from V4:
 - **Runtime Tests** → Validate execution (slower, 1-5 sec per test)
 
 **Benefit**: AST bugs caught in seconds, not minutes.
+
+### 5. Minimal AST, robust Model
+
+- AST stays logic-light: builds parameter symbol tables by merging at boundaries; performs compile-time constant folding when safe.
+- Model owns late binding: resolves param refs via parent chain, applies inheritance and precedence rules.
 
 ### 4. Incremental Commits
 

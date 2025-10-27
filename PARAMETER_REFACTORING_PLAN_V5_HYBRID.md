@@ -1,15 +1,227 @@
 # Parameter System Implementation - Hybrid Incremental Plan V5
 
+## What We're Building: Parameter Features
+
+**Goal**: Fix critical parameter propagation bugs and extend parameter support to complex query scenarios.
+
+---
+
+### 📊 Current State (main branch at fork point)
+
+**Basic Parameters Already Work** ✅:
+- Simple parameterized sources with defaults
+- Parameters in dimensions and basic expressions
+- Parameters in source extensions
+- Parameters in simple joins
+- Filter expression parameters
+- Default value propagation
+
+**Example (already works on main)**:
+```malloy
+source: filtered_orders(min_amount::number is 100) is duckdb.table('orders') extend {
+  where: amount >= min_amount
+}
+run: filtered_orders(min_amount is 500) -> { aggregate: total is sum(amount) }
+```
+
+**What DOESN'T Work (blockers)** ❌:
+```malloy
+// ❌ FAILS: Parameters in multi-stage pipelines
+run: source(threshold is 100) -> { group_by: x } -> { where: x > threshold }
+// Error: threshold not found in second stage
+
+// ❌ FAILS: Parameters in join pipelines
+join_one: j is other_source(p is 10) with some_field -> { where: amount > p }
+// Error: p not found in pipeline
+
+// ❌ FAILS: Parameters through refine operations
+source: s2 is s1 + { where: x > param }
+// Error: param not in scope
+```
+
+---
+
+### 🎯 New Use Cases Enabled by This PR
+
+This PR fixes critical bugs that blocked parameters in complex query scenarios. Here are concrete examples of what NOW works:
+
+---
+
+#### 1. **Multi-Stage Pipeline Analysis** 🆕
+```malloy
+// ❌ FAILED on main: "threshold not found in stage 2"
+// ✅ NOW WORKS: Parameter propagates through all stages
+
+source: sales(threshold::number is 1000) is duckdb.table('sales')
+
+run: sales(threshold is 500) -> {
+  // Stage 1: Group by category, count high-value items
+  group_by: category
+  aggregate:
+    high_value_count is count() { where: amount > threshold }  // ✅ threshold works!
+} -> {
+  // Stage 2: Filter to categories with enough high-value items
+  where: high_value_count > 10  // ✅ threshold still available!
+  order_by: high_value_count desc
+}
+```
+
+**Before**: Error - parameter not found in second pipeline stage
+**Now**: Parameter automatically propagates through all stages
+**Use Case**: Complex funnel analysis, staged filtering with consistent thresholds
+
+---
+
+#### 2. **Parameterized Join Pipelines** 🆕
+```malloy
+// ❌ FAILED on main: "min_amount not found in join pipeline"
+// ✅ NOW WORKS: Parameters accessible inside join pipelines
+
+source: orders(min_amount::number is 100) is duckdb.table('orders')
+
+source: customers is duckdb.table('customers') extend {
+  join_one: high_value_orders is orders(min_amount is 500)
+    with customer_id
+    -> {
+      // ✅ min_amount accessible in join pipeline!
+      where: order_date > @2023-01-01 AND amount > min_amount
+      aggregate: total is sum(amount)
+    }
+}
+
+run: customers -> { select: customer_name, high_value_orders.total }
+```
+
+**Before**: Error - parameter not accessible in join pipeline stage
+**Now**: Parameters work in join pipeline transformations
+**Use Case**: Filtered joined aggregates, parameterized relationship definitions
+
+---
+
+#### 3. **Dynamic Query Composition** 🆕
+```malloy
+// ❌ FAILED on main: "threshold not accessible in query source"
+// ✅ NOW WORKS: Query definitions can use outer parameters
+
+source: base(threshold::number is 100) is duckdb.table('data')
+
+source: analyzed is base extend {
+  // ✅ Parameterized query as a nested view
+  view: high_value is {
+    where: amount > threshold  // ✅ Outer parameter accessible!
+    aggregate:
+      count is count()
+      total is sum(amount)
+  }
+}
+
+run: analyzed(threshold is 500) -> high_value
+```
+
+**Before**: Error - parameter not in scope for nested query
+**Now**: Nested queries inherit outer parameter scope
+**Use Case**: Reusable parameterized views, modular query building
+
+---
+
+#### 4. **Refine with Parameters** 🆕
+```malloy
+// ❌ FAILED on main: "param not found in refine operation"
+// ✅ NOW WORKS: Refine operations preserve parameter scope
+
+source: base(min_value::number is 10) is duckdb.table('data') extend {
+  dimension: value_check is value > min_value
+}
+
+// ✅ Refine operation preserves parameters
+source: refined is base + {
+  where: value > min_value  // ✅ Parameter still accessible!
+  dimension: double_check is value > min_value * 2
+}
+
+run: refined(min_value is 50) -> { select: * }
+```
+
+**Before**: Error - parameter scope lost in refine operation
+**Now**: Refine preserves full parameter scope
+**Use Case**: Incremental source refinement, layered filtering
+
+---
+
+#### 5. **Complex Join-in-View Scenarios** 🆕
+```malloy
+// ❌ FAILED on main: Multiple parameter scoping errors
+// ✅ NOW WORKS: Parameters flow correctly through complex joins in views
+
+source: orders(region::string is 'US') is duckdb.table('orders')
+
+source: products is duckdb.table('products') extend {
+  view: regional_analysis is {
+    join_one: regional_orders is orders(region) on product_id = regional_orders.product_id
+    -> {
+      // ✅ region parameter accessible in join pipeline
+      where: order_date > @2024-01-01 AND region_code = region
+      aggregate: sales is sum(amount)
+    }
+
+    aggregate: total_sales is regional_orders.sales
+  }
+}
+
+run: products -> regional_analysis(region is 'EU')
+```
+
+**Before**: Multiple errors - parameters not accessible in join-in-view with pipelines
+**Now**: Full parameter support in complex join scenarios
+**Use Case**: Parameterized cross-table analytics, dynamic relationship filtering
+
+---
+
+### Features Supported
+
+| Feature | Example | On Main? | This PR |
+|---------|---------|----------|---------|
+| **Type System** | `p::number`, `p::string`, `p::boolean`, `p::date` | ✅ Yes | Improved |
+| **Default Values** | `p::number is 42` | ✅ Yes | No change |
+| **Runtime Override** | `run: source(p is 99)` | ✅ Yes | Improved precedence |
+| **Source Extension** | Extended sources inherit parameters | ✅ Yes | Improved merging |
+| **Simple Joins** | Parameters in basic join scenarios | ✅ Yes | No change |
+| **Filter Expressions** | `p::filter<string>` | ✅ Yes | No change |
+| **Cross-Dialect** | PostgreSQL, DuckDB, BigQuery, etc. | ✅ Yes | No change |
+| **Pipeline Propagation** | Parameters available in all pipeline stages | ❌ **Broken** | 🆕 **FIXED** |
+| **Join Pipelines** | Parameters in join pipeline stages | ❌ **Broken** | 🆕 **FIXED** |
+| **Refine Operations** | `source: s2 is s1 + { where: x > p }` | ❌ **Broken** | 🆕 **FIXED** |
+| **Query Definitions** | Parameters in `run:` definitions | ❌ No | 🆕 **NEW** |
+| **Join-in-View** | Complex join scenarios in views | ❌ **Broken** | 🆕 **FIXED** |
+
+**Summary**: Basic parameters worked on main. This PR **fixes critical propagation bugs** and extends support to complex scenarios (pipelines, joins, refines).
+
+---
+
+### Parameter Precedence Rules
+
+When the same parameter is declared at multiple levels:
+
+1. **Runtime literal** (highest) - `run: source(p is 42)`
+2. **Declared param-ref** (resolved from parent) - `q::number is outer.p`
+3. **Declared literal** - `p::number is 10`
+4. **Default value** - From parameter declaration
+5. **Parent parameter** (lowest) - Inherited from extended source
+
+**Key Rule**: Runtime overrides can replace declared param-refs but NOT declared literals.
+
+---
+
 ## Strategy Overview
 
 **Approach**: Graduated complexity levels with test-driven micro-iterations
-**Innovation**: Vertical slices (end-to-end) with 15-30 min feedback cycles
+**Innovation**: Vertical slices (end-to-end) with fast feedback cycles
 **Risk Mitigation**: Validate complete feature before adding complexity
 
 ### Key Principles
 
 1. ✅ **Vertical Slices**: Each level is complete (AST→IR→Model→SQL) before next
-2. ✅ **Micro-Iterations**: 15-30 min cycles with immediate feedback
+2. ✅ **Micro-Iterations**: Small cycles with immediate feedback
 3. ✅ **Fast Validation**: Multiple feedback stages (build→IR→translate→execute)
 4. ✅ **Stop on Red**: Don't proceed if tests fail
 5. ✅ **Flexible Commits**: Commit when valuable (level completion, significant milestones, or end)
@@ -163,9 +375,37 @@ git commit -S -m "message"
 
 ---
 
-## Phase 0: Setup & Infrastructure (2-3 hours)
+## Tracking & Logs
 
-### 0.1: Environment Setup (30 min)
+To ensure transparency, reviewability, and easy handoff, we will track progress and maintain a detailed log of work in dedicated files:
+
+- PROGRESS_TRACKER.md
+  - What to track: Level/iteration completion, current pass counts, “what works now” and “what’s next”.
+  - Cadence: Update after each iteration and at level completion.
+
+- CHANGELOG_PARAMS.md
+  - What to track: A concise log per iteration with What/Why/How, files changed, tests added/passing, and validation status.
+  - Cadence: Update after each iteration.
+
+- VALIDATION_CHECKLIST.md
+  - What to track: Build/IR/Translation/Runtime checks per iteration; per-level final checks; pre-PR checklist.
+  - Cadence: Use before committing each iteration; mandatory at level completion.
+
+- TEST_ORGANIZATION.md
+  - What to track: Test categorization by levels and features; the incremental test addition approach.
+  - Cadence: Update when enabling new test groups.
+
+- scripts/count_param_tests.js
+  - Purpose: Programmatically count reference tests (source of truth for target counts) to avoid drift.
+  - Cadence: Run during Phase 0 and as needed to re-sync targets.
+
+These artifacts are part of the plan deliverables and should be kept up to date so maintainers can quickly understand scope, progress, and validation.
+
+---
+
+## Phase 0: Setup & Infrastructure
+
+### 0.1: Environment Setup
 
 ```bash
 # 1. Create worktree from main
@@ -244,7 +484,7 @@ Build validated: clean ✓"
 
 ---
 
-### 0.2: Setup Test Files (30 min)
+### 0.2: Setup Test Files
 
 ```bash
 # Create empty test files that we'll populate incrementally
@@ -465,7 +705,7 @@ Target: ~128 tests (run \`node scripts/count_param_tests.js\` for exact count)"
 
 ---
 
-### 0.3: Create Test Helpers (30 min)
+### 0.3: Create Test Helpers
 
 ```bash
 # Create directory if needed
@@ -650,7 +890,7 @@ Tests: 0/128 passing (starting point)"
 
 ---
 
-### 0.4: Create Progress Tracking (30 min)
+### 0.4: Create Progress Tracking
 
 ```bash
 # Create progress tracker
@@ -728,7 +968,6 @@ Each entry documents a single iteration (15-30 min of work).
 
 ### [Level.Iteration] - Title
 **Date:** YYYY-MM-DD HH:MM
-**Time Spent:** X min
 **Files Modified:**
 - `path/to/file1.ts` (+X/-Y lines)
 - `path/to/file2.ts` (+X/-Y lines)
@@ -751,7 +990,6 @@ Each entry documents a single iteration (15-30 min of work).
 
 ### [0.1] - Environment Setup
 **Date:** [DATE]
-**Time Spent:** 30 min
 **Files Modified:**
 - Initial setup
 
@@ -770,7 +1008,7 @@ EOF
 cat > VALIDATION_CHECKLIST.md << 'EOF'
 # Validation Checklist
 
-## After Each Iteration (15-30 min)
+## After Each Iteration
 
 Run these checks:
 
@@ -790,11 +1028,9 @@ Run these checks:
 - [ ] **Commit Message**: Clear and follows convention (signed)
 - [ ] **Logical Grouping**: Commit represents a coherent unit of work
 
-**Time Budget**: ~5 min validation per iteration
-
 ---
 
-## After Each Level (4-5 hours)
+## After Each Level
 
 Before moving to next level:
 
@@ -814,8 +1050,6 @@ Before moving to next level:
 - [ ] **Code Review**: Quick self-review of code quality
 - [ ] **Documentation**: Level completion documented in PROGRESS_TRACKER.md
 - [ ] **Commit** (RECOMMENDED): Level completion committed with summary
-
-**Time Budget**: ~30 min validation per level
 
 ---
 
@@ -876,7 +1110,7 @@ Phase 0: 4/5 actions complete"
 
 ---
 
-### 0.5: Final Setup Validation (15 min)
+### 0.5: Final Setup Validation
 
 ```bash
 # Verify everything is set up correctly
@@ -940,7 +1174,7 @@ See SETUP_VALIDATION.log for details"
 
 ---
 
-## Level 1: Basic Parameters (4-5 hours)
+## Level 1: Basic Parameters
 
 **Goal**: Parameters work in simple queries (no propagation, no pipelines)
 
@@ -953,7 +1187,7 @@ See SETUP_VALIDATION.log for details"
 
 ---
 
-### Level 1 Preparation (10 min)
+### Level 1 Preparation
 
 **Before starting iterations, review the reference implementation:**
 
@@ -986,11 +1220,9 @@ cd ../malloy-param-clean
 - Need to integrate with existing lookup infrastructure
 - Type checking for default values
 
-**Time**: 10 min reading, saves 30+ min debugging
-
 ---
 
-### Iteration 1.1: ParameterSpace Foundation (30 min)
+### Iteration 1.1: ParameterSpace Foundation
 
 **Objective**: Create ParameterSpace class that integrates with FieldSpace
 
@@ -1156,7 +1388,7 @@ export class ParameterSpace implements FieldSpace {
 npm run build
 
 # Expected: Builds successfully
-# Time: ~10 seconds
+# Fast feedback - just build validation
 ```
 
 **Changelog Entry**:
@@ -1165,7 +1397,6 @@ cat >> CHANGELOG_PARAMS.md << 'EOF'
 
 ### [1.1] - ParameterSpace Foundation
 **Date:** $(date +"%Y-%m-%d %H:%M")
-**Time Spent:** 30 min
 **Files Modified:**
 - `packages/malloy/src/lang/ast/field-space/parameter-space.ts` (+110/-0 lines, new file)
 
@@ -1222,12 +1453,12 @@ Architectural notes:
 
 Validation: Build ✓
 Progress: 0/128 tests (foundation only)
-Time: 30 min"
+"
 ```
 
 ---
 
-### Iteration 1.2: Parse Parameter Declaration (45 min)
+### Iteration 1.2: Parse Parameter Declaration
 
 **Objective**: Parse `source: s(param::number) is t` and create ParameterSpace
 
@@ -1334,7 +1565,6 @@ cat >> CHANGELOG_PARAMS.md << 'EOF'
 
 ### [1.2] - Parse Parameter Declarations
 **Date:** $(date +"%Y-%m-%d %H:%M")
-**Time Spent:** 45 min
 **Files Modified:**
 - `packages/malloy/src/lang/ast/source-elements/named-source.ts` (+X lines)
 - (potentially) `packages/malloy/src/lang/ast/parameters/has-parameter.ts`
@@ -1377,12 +1607,12 @@ Tests: 3/128 passing (2 IR + 1 translation)
 - ✓ Basic declaration translates
 
 Validation: Build ✓, IR ✓, Translation ✓
-Time: 45 min"
+"
 ```
 
 ---
 
-### Iteration 1.3: Default Values (30 min)
+### Iteration 1.3: Default Values
 
 [Similar pattern - test first, implement, validate, commit]
 
@@ -1394,7 +1624,7 @@ Time: 45 min"
 
 ---
 
-### Iteration 1.4: Type Checking (30 min)
+### Iteration 1.4: Type Checking
 
 **Target**: Validate parameter types
 
@@ -1405,7 +1635,7 @@ Time: 45 min"
 
 ---
 
-### Iteration 1.5: Model Layer Integration (1.5 hours)
+### Iteration 1.5: Model Layer Integration
 
 **Objective**: Model reads parameters and resolves them properly
 
@@ -1417,7 +1647,7 @@ Time: 45 min"
 1. `packages/malloy/src/model/query_node.ts`
 2. `packages/malloy/src/model/expression_compiler.ts`
 
-#### Step 1: Implement QueryStruct.arguments() (45 min)
+#### Step 1: Implement QueryStruct.arguments()
 
 **Location**: `packages/malloy/src/model/query_node.ts`
 
@@ -1558,7 +1788,7 @@ export class QueryStruct {
 - Comments explain each step
 - Handles parameter reference nodes (late binding)
 
-#### Step 2: Handle Parameters in Expression Compiler (30 min)
+#### Step 2: Handle Parameters in Expression Compiler
 
 **Location**: `packages/malloy/src/model/expression_compiler.ts`
 
@@ -1597,7 +1827,7 @@ export function exprToSQL(
 }
 ```
 
-#### Step 3: Test Level 1 Model Integration (15 min)
+#### Step 3: Test Level 1 Model Integration
 
 ```bash
 # Enable first runtime test
@@ -1639,11 +1869,9 @@ Added parameter node case to expression compiler.
 First runtime test passing: 'number param used in dimension'"
 ```
 
-**Time**: 1.5 hours (45m + 30m + 15m)
-
 ---
 
-### Iteration 1.6: Precedence Tests (45 min)
+### Iteration 1.6: Precedence Tests
 
 **Objective**: Lock down exact precedence rules early
 
@@ -1732,11 +1960,9 @@ Lock down exact precedence rules:
 4 tests ensure Model layer precedence logic is correct."
 ```
 
-**Time**: 45 min
-
 ---
 
-### Iteration 1.7: Cross-Dialect Smoke Tests (30 min)
+### Iteration 1.7: Cross-Dialect Smoke Tests
 
 **Objective**: Catch SQL quoting/formatting issues early across dialect families
 
@@ -1822,11 +2048,9 @@ Validate SQL generation across dialect families:
 Catches formatting/quoting issues early (Level 1)."
 ```
 
-**Time**: 30 min
-
 ---
 
-### Iteration 1.8: Level 1 Final Validation (15 min)
+### Iteration 1.8: Level 1 Final Validation
 
 **Objective**: Confirm all Level 1 features work end-to-end
 
@@ -1873,18 +2097,17 @@ cat >> PROGRESS_TRACKER.md << 'EOF'
 
 ## Level 1 Complete ✅
 **Date:** $(date)
-**Time:** 6.5 hours
 **Tests:** 22/~128 passing (12 AST + 10 runtime)
 
 ### Iterations Completed
-- ✓ 1.1: ParameterSpace foundation (30 min)
-- ✓ 1.2: Parse declarations (45 min)
-- ✓ 1.3: Default values (30 min)
-- ✓ 1.4: Type checking (30 min)
-- ✓ 1.5: Model integration with late binding (1.5 hours)
-- ✓ 1.6: Precedence tests (45 min)
-- ✓ 1.7: Cross-dialect smoke tests (30 min)
-- ✓ 1.8: Final validation (15 min)
+- ✓ 1.1: ParameterSpace foundation
+- ✓ 1.2: Parse declarations
+- ✓ 1.3: Default values
+- ✓ 1.4: Type checking
+- ✓ 1.5: Model integration with late binding
+- ✓ 1.6: Precedence tests
+- ✓ 1.7: Cross-dialect smoke tests
+- ✓ 1.8: Final validation
 
 ### What Works
 - ✅ Parameter declaration with types
@@ -1898,7 +2121,7 @@ cat >> PROGRESS_TRACKER.md << 'EOF'
 - ✅ **Cross-dialect validated** (DuckDB, PostgreSQL)
 
 ### What's Next
-Level 2: Parameter Propagation (~20 tests, 3.5-4.5 hours)
+Level 2: Parameter Propagation (~20 tests)
 EOF
 
 # Commit level completion (RECOMMENDED - Major Milestone)
@@ -1936,7 +2159,7 @@ Next: Level 2 - Parameter Propagation"
 
 ---
 
-## Level 2: Parameter Propagation (3.5-4.5 hours)
+## Level 2: Parameter Propagation
 
 **Goal**: Parameters flow through source extensions and views
 
@@ -1950,7 +2173,7 @@ Next: Level 2 - Parameter Propagation"
 
 ---
 
-### Level 2 Preparation (10 min)
+### Level 2 Preparation
 
 **Review propagation implementation:**
 
@@ -1987,16 +2210,15 @@ cd ../malloy-param-clean
 - Handling parameter shadowing correctly
 - Override precedence: runtime > param-ref > literal > default
 
-**Time**: 10 min preparation
 
 ---
 
 ### Iterations
 
-2.1: Source Extension (1 hour) - Merge-based parameter visibility (outer + local) at extension boundaries
-2.2: Views Accessing Parameters (1 hour) - Views see merged parameters from base source
-2.3: Runtime Override (45 min) - Model handles runtime override precedence
-2.4: Nested Propagation (45 min) - Multi-level inheritance
+2.1: Source Extension - Merge-based parameter visibility (outer + local) at extension boundaries
+2.2: Views Accessing Parameters - Views see merged parameters from base source
+2.3: Runtime Override - Model handles runtime override precedence
+2.4: Nested Propagation - Multi-level inheritance
 
 [Each iteration follows same pattern: Test → Implement → Validate → Commit]
 
@@ -2030,11 +2252,10 @@ test('AST: StaticSourceSpace.entry() resolves parameter after extend', () => {
 
 **Why**: This gives ~10 sec feedback (AST only) vs ~30 sec (full runtime execution). Catches AST merge issues immediately.
 
-**Time**: Add this test in iteration 2.1 (adds ~5-10 min)
 
 ---
 
-## Level 3: Pipeline Parameters (4.5-5.5 hours)
+## Level 3: Pipeline Parameters
 
 **Goal**: Parameters work in multi-stage pipelines
 
@@ -2048,7 +2269,7 @@ test('AST: StaticSourceSpace.entry() resolves parameter after extend', () => {
 
 ---
 
-### Level 3 Preparation (15 min)
+### Level 3 Preparation
 
 **Review pipeline implementation (most complex part):**
 
@@ -2088,20 +2309,19 @@ cd ../malloy-param-clean
 
 **Critical**: This was the main fix in working branch - study carefully!
 
-**Time**: 15 min preparation (extra time worth it - complex!)
 
 ---
 
 ### Iterations
 
-3.1: Thread Through QueryArrow (1.5 hours)
-3.2: Multi-Stage Access (1 hour)
-3.3: Stage-Specific Expressions (1 hour)
-3.4: Aggregates with Parameters (1 hour)
+3.1: Thread Through QueryArrow
+3.2: Multi-Stage Access
+3.3: Stage-Specific Expressions
+3.4: Aggregates with Parameters
 
 ---
 
-## Level 4: Join Parameters (3-4 hours)
+## Level 4: Join Parameters
 
 **Goal**: Parameters work with joins
 
@@ -2113,7 +2333,7 @@ cd ../malloy-param-clean
 
 ---
 
-### Level 4 Preparation (10 min)
+### Level 4 Preparation
 
 **Review join parameter handling:**
 
@@ -2145,19 +2365,18 @@ cd ../malloy-param-clean
 - Scope resolution in join conditions
 - Multiple levels of joins
 
-**Time**: 10 min preparation
 
 ---
 
 ### Iterations
 
-4.1: Parameterized Joins (1.5 hours)
-4.2: Join Conditions (1 hour)
-4.3: Outer Scope Access (1 hour)
+4.1: Parameterized Joins
+4.2: Join Conditions
+4.3: Outer Scope Access
 
 ---
 
-## Level 5: Advanced Features (3-4 hours)
+## Level 5: Advanced Features
 
 **Goal**: Special cases and edge cases
 
@@ -2169,7 +2388,7 @@ cd ../malloy-param-clean
 
 ---
 
-### Level 5 Preparation (10 min)
+### Level 5 Preparation
 
 **Review advanced features:**
 
@@ -2204,35 +2423,34 @@ cd ../malloy-param-clean
 - Refine scope resolution
 - Edge cases: null, undefined, type mismatches
 
-**Time**: 10 min preparation
 
 ---
 
 ### Iterations
 
-5.1: Filter Expression Parameters (1.5 hours)
-5.2: Refine Operations (1 hour)
-5.3: Edge Cases (1.5 hours)
+5.1: Filter Expression Parameters
+5.2: Refine Operations
+5.3: Edge Cases
 
 ---
 
-## Final Phase: Integration & Polish (2-3 hours)
+## Final Phase: Integration & Polish
 
-### Polish 1: Enable Remaining Runtime Tests (1 hour)
+### Polish 1: Enable Remaining Runtime Tests
 
 Enable and validate all remaining runtime tests
 
-### Polish 2: Remove Debug Code (30 min)
+### Polish 2: Remove Debug Code
 
 Search for and remove any debug logging, console statements
 
-### Polish 3: Documentation (1 hour)
+### Polish 3: Documentation
 
 - Update README if needed
 - Document known limitations
 - Note future work items
 
-### Polish 4: Final Validation (30 min)
+### Polish 4: Final Validation
 
 ```bash
 # All parameter tests
@@ -2370,7 +2588,6 @@ Tests: X/128 passing (<change from previous>)
 <List of tests passing>
 
 Validation: Build ✓, IR ✓, Translation ✓, Runtime ✓
-Time: X min
 ```
 
 **Types**: `feat`, `fix`, `test`, `docs`, `chore`
