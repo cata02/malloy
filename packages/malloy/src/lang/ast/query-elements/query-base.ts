@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {
   hasCompositesAnywhere,
   resolveCompositeSources,
@@ -37,22 +38,27 @@ import {ErrorFactory} from '../error-factory';
 import {detectAndRemovePartialStages} from '../query-utils';
 import {MalloyElement} from '../types/malloy-element';
 import type {QueryComp} from '../types/query-comp';
+
 export abstract class QueryBase extends MalloyElement {
   abstract queryComp(isRefOk: boolean): QueryComp;
+
   protected expandFieldUsage(
     inputSource: SourceDef,
     pipeline: PipeSegment[]
   ): PipeSegment[] {
     const ret: PipeSegment[] = [];
     let stageInput = inputSource;
+
     for (const segment of pipeline) {
       const newSegment = getExpandedSegment(segment, stageInput);
       ret.push(newSegment);
       // Get the output struct for the next stage
       stageInput = newSegment.outputStruct || ErrorFactory.structDef;
     }
+
     return ret;
   }
+
   protected resolveCompositeSource(
     inputSource: SourceDef,
     pipeline: PipeSegment[]
@@ -74,6 +80,7 @@ export abstract class QueryBase extends MalloyElement {
     }
     return undefined;
   }
+
   query(): Query {
     const result = this.queryComp(true);
     const query = result.query;

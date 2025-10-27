@@ -2,6 +2,9 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
+
+
+
 import { QueryQuery } from './query_query';
 import type { ModelDef, StructRef, Argument, PrepareResultOptions, Query, SourceDef, SearchIndexResult, CompiledQuery, RefToField, TurtleDefPlusFilters, TurtleDef, } from './malloy_types';
 import { isSourceDef, getIdentifier, isAtomic } from './malloy_types';
@@ -17,6 +20,21 @@ export function makeQueryModel(modelDef: ModelDef | undefined, eventStream?: Eve
     return new QueryModelImpl(modelDef, eventStream);
 }
 export class QueryModelImpl implements QueryModel, ModelRootInterface {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     dialect: Dialect = new StandardSQLDialect();
     // dialect: Dialect = new PostgresDialect();
     modelDef: ModelDef | undefined = undefined;
@@ -239,6 +257,8 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
                     },
                 },
             ],
+
+
         };
         const fieldNameColumn = d.sqlMaybeQuoteIdentifier('fieldName');
         const fieldPathColumn = d.sqlMaybeQuoteIdentifier('fieldPath');
@@ -265,6 +285,8 @@ export class QueryModelImpl implements QueryModel, ModelRootInterface {
             ORDER BY CASE WHEN lower(${fieldValueColumn}) LIKE  lower(${d.sqlLiteralString(searchValue + '%')}) THEN 1 ELSE 0 END DESC, ${weightColumn} DESC
             LIMIT ${limit}
           `;
+
+
         if (d.hasFinalStage) {
             query = `WITH __stage0 AS(\n${query}\n)\n${d.sqlFinalStage('__stage0', [
                 fieldNameColumn,

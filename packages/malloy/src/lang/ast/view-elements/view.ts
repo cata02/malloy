@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {PipeSegment} from '../../../model/malloy_types';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
 import type {FieldSpace, SourceFieldSpace} from '../types/field-space';
@@ -54,12 +55,14 @@ export abstract class View extends MalloyElement {
   ): PipeSegment[] {
     return this.pipelineComp(fs, parameterSpace, isNestIn).pipeline;
   }
+
   abstract refine(
     inputFS: SourceFieldSpace,
     pipeline: PipeSegment[],
     parameterSpace: ParameterSpace | undefined,
     isNestIn: QueryOperationSpace | undefined
   ): PipeSegment[];
+
   abstract getImplicitName(): string | undefined;
   assignParameterSpace(parameterSpace: ParameterSpace | undefined): void {
     void parameterSpace;

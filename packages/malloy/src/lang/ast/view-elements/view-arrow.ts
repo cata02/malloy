@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {PipeSegment} from '../../../model';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
 import {StaticSourceSpace} from '../field-space/static-space';
@@ -40,6 +41,7 @@ import type {ParameterSpace} from '../field-space/parameter-space';
  */
 export class ViewArrow extends View {
   elementType = 'viewArrow';
+
   constructor(
     readonly base: View,
     readonly operation: View
@@ -81,6 +83,7 @@ export class ViewArrow extends View {
       outputStruct: finalComp.outputStruct,
     };
   }
+
   refine(
     _inputFS: SourceFieldSpace,
     _pipeline: PipeSegment[],
@@ -93,6 +96,7 @@ export class ViewArrow extends View {
     );
     return [];
   }
+
   getImplicitName(): string | undefined {
     return this.operation.getImplicitName();
   }

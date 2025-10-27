@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {Query, StructDef, Argument} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import {Source} from '../source-elements/source';
@@ -41,6 +42,7 @@ import {HasParameter} from '../parameters/has-parameter';
  */
 export class QueryArrow extends QueryBase implements QueryElement {
   elementType = 'arrow';
+
   constructor(
     readonly source: Source | QueryElement,
     readonly view: View,
@@ -48,6 +50,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
   ) {
     super({source, view});
   }
+
   queryComp(isRefOk: boolean): QueryComp {
     let inputStruct: StructDef;
     let queryBase: Query;
@@ -131,15 +134,18 @@ export class QueryArrow extends QueryBase implements QueryElement {
       outputStruct,
       name,
     } = this.view.pipelineComp(fieldSpace);
+
     const query = {
       ...queryBase,
       name,
       annotation,
       pipeline: [...queryBase.pipeline, ...rhsPipeline],
     };
+
     const compositeResolvedSourceDef =
       query.compositeResolvedSourceDef ??
       this.resolveCompositeSource(inputStruct, rhsPipeline);
+
     const segment = query.pipeline[0];
     if (segment !== undefined) {
       const unsatisfiedGroupBys = checkRequiredGroupBys(
@@ -158,6 +164,7 @@ export class QueryArrow extends QueryBase implements QueryElement {
         );
       }
     }
+
     const pipelineWithExpandedFieldUsage = [
       // The base query (if it exists) will already have its `expandedFieldUsage` computed
       ...queryBase.pipeline,

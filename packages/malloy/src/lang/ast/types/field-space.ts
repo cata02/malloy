@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {Dialect} from '../../../dialect/dialect';
 import type {
   AccessModifierLabel,
@@ -52,26 +53,33 @@ export interface FieldSpace {
   accessProtectionLevel(): AccessModifierLabel;
   parameterSpace?(): ParameterSpace;
 }
+
 export interface SourceFieldSpace extends FieldSpace {
   structDef(): SourceDef;
   emptyStructDef(): SourceDef;
 }
+
 export interface QueryFieldSpace extends SourceFieldSpace {
   outputSpace(): QueryOperationSpace;
   inputSpace(): SourceFieldSpace;
   isQueryOutputSpace(): boolean;
 }
+
 export class FieldName extends MalloyElement {
   elementType = 'fieldName';
+
   constructor(readonly name: string) {
     super();
   }
+
   get refString(): string {
     return this.name;
   }
+
   override toString(): string {
     return this.refString;
   }
+
   getField(fs: FieldSpace): LookupResult {
     return fs.lookup([this]);
   }

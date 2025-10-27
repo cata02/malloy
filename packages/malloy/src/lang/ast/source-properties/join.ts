@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {
   Annotation,
   JoinFieldDef,
@@ -61,6 +62,7 @@ export abstract class Join
   extendNote = extendNoteMethod;
   abstract sourceExpr: SourceQueryElement;
   note?: Annotation;
+
   makeEntry(fs: DynamicSpace) {
     fs.newEntry(
       this.name.refString,
@@ -73,9 +75,11 @@ export abstract class Join
       )
     );
   }
+
   getName(): string {
     return this.name.refString;
   }
+
   protected getStructDefFromExpr(parameterSpace: ParameterSpace): SourceDef {
     const source = this.sourceExpr.getSource();
     if (!source) {
@@ -88,6 +92,7 @@ export abstract class Join
     return source.getSourceDef(parameterSpace);
   }
 }
+
 export class KeyJoin extends Join {
   elementType = 'joinOnKey';
   constructor(
@@ -97,6 +102,7 @@ export class KeyJoin extends Join {
   ) {
     super({name, sourceExpr, keyExpr});
   }
+
   getStructDef(parameterSpace: ParameterSpace): JoinFieldDef {
     const sourceDef = this.getStructDefFromExpr(parameterSpace);
     if (!isJoinable(sourceDef)) {
@@ -111,12 +117,14 @@ export class KeyJoin extends Join {
       location: this.location,
     };
     delete joinStruct.as;
+
     if (this.note) {
       joinStruct.annotation = this.note;
     }
     this.document()?.rememberToAddModelAnnotations(joinStruct);
     return joinStruct;
   }
+
   fixupJoinOn(outer: FieldSpace, inStruct: JoinFieldDef): void {
     const exprX = this.keyExpr.getExpression(outer);
     if (isSourceDef(inStruct) && inStruct.primaryKey) {
@@ -162,6 +170,7 @@ export class KeyJoin extends Join {
     }
   }
 }
+
 export class ExpressionJoin extends Join {
   elementType = 'joinOnExpr';
   joinType: JoinType = 'one';
@@ -173,13 +182,16 @@ export class ExpressionJoin extends Join {
   ) {
     super({name, sourceExpr});
   }
+
   set joinOn(joinExpr: ExpressionDef | undefined) {
     this.expr = joinExpr;
     this.has({on: joinExpr});
   }
+
   get joinOn(): ExpressionDef | undefined {
     return this.expr;
   }
+
   fixupJoinOn(outer: FieldSpace, inStruct: JoinFieldDef) {
     if (this.expr === undefined) {
       return;
@@ -195,6 +207,7 @@ export class ExpressionJoin extends Join {
     inStruct.onExpression = exprX.value;
     inStruct.fieldUsage = exprX.fieldUsage;
   }
+
   getStructDef(parameterSpace: ParameterSpace): JoinFieldDef {
     const source = this.sourceExpr.getSource();
     if (!source) {
@@ -268,6 +281,7 @@ export class ExpressionJoin extends Join {
     if (this.inExperiment('join_types', true)) {
       matrixOperation = this.matrixOperation;
     }
+
     if (!isJoinable(sourceDef)) {
       throw this.internalError(`Can't join struct type ${sourceDef.type}`);
     }
@@ -286,6 +300,7 @@ export class ExpressionJoin extends Join {
     return joinStruct;
   }
 }
+
 export class JoinStatement
   extends DefinitionList<Join>
   implements QueryPropertyInterface
@@ -293,18 +308,21 @@ export class JoinStatement
   elementType = 'joinStatement';
   forceQueryClass = undefined;
   queryRefinementStage = LegalRefinementStage.Single;
+
   constructor(
     joins: Join[],
     readonly accessModifier: AccessModifierLabel | undefined
   ) {
     super(joins);
   }
+
   queryExecute(executeFor: QueryBuilder) {
     for (const qel of this.list) {
       executeFor.inputFS.extendSource(qel);
       executeFor.alwaysJoins.push(qel.name.refString);
     }
   }
+
   get delarationNames(): string[] {
     return this.list.map(el => el.name.refString);
   }

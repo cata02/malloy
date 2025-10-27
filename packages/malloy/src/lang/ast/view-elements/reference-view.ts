@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {mergeFieldUsage} from '../../composite-source-utils';
 import type {PipeSegment, SourceDef} from '../../../model/malloy_types';
 import {
@@ -57,6 +58,7 @@ export class ReferenceView extends View {
   constructor(readonly reference: ViewOrScalarFieldReference) {
     super({reference});
   }
+
   // `isNestIn` is not needed because `ReferenceView`s never create a field space
   // that would use it; this operation is already compiled, and `isNestIn` is only
   // used for checking `exclude` references.
@@ -68,6 +70,7 @@ export class ReferenceView extends View {
     this.parameterSpace = parameterSpace ?? this.parameterSpace;
     return this._pipelineComp(fs);
   }
+
   _pipelineComp(
     fs: SourceFieldSpace,
     {forRefinement} = {forRefinement: false}
@@ -175,6 +178,7 @@ export class ReferenceView extends View {
       return oops();
     }
   }
+
   private getRefinement(inputFS: SourceFieldSpace): PipeSegment | undefined {
     const {pipeline, error} = this._pipelineComp(inputFS, {
       forRefinement: true,
@@ -197,6 +201,7 @@ export class ReferenceView extends View {
       })),
     };
   }
+
   // `isNestIn` is not needed because `ReferenceView`s never create a field space
   // that would use it; this operation is already compiled, and `isNestIn` is only
   // used for checking `exclude` references.
@@ -214,6 +219,7 @@ export class ReferenceView extends View {
     // TODO better error pipeline
     return pipeline;
   }
+
   getImplicitName(): string | undefined {
     return this.reference.nameString;
   }

@@ -2,12 +2,15 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
+
 import type {QueryStruct} from './query_node';
 import {QueryFieldBoolean} from './query_node';
 import {getDialectFieldList} from './utils';
 import type {JoinRelationship, UniqueKeyRequirement} from './malloy_types';
+
 import {isSourceDef, isJoined} from './malloy_types';
 import type {DialectFieldList} from '../dialect';
+
 export class JoinInstance {
   uniqueKeyRequirement?: UniqueKeyRequirement;
   makeUniqueKey = false;
@@ -22,6 +25,7 @@ export class JoinInstance {
     if (parent) {
       parent.children.push(this);
     }
+
     // convert the filter list into a list of boolean fields so we can
     //  generate dependancies and code for them.
     const sd = this.queryStruct.structDef;
@@ -39,6 +43,7 @@ export class JoinInstance {
       );
     }
   }
+
   parentRelationship(): 'root' | JoinRelationship {
     if (this.queryStruct.parent === undefined) {
       return 'root';
@@ -62,6 +67,7 @@ export class JoinInstance {
       `Internal error unknown relationship type to parent for ${this.queryStruct.structDef.name}`
     );
   }
+
   // For now, we force all symmetric calculations for full and right joins
   //  because we need distinct keys for COUNT(xx) operations.  Don't really need
   //  this for sums.  This will produce correct results and we can optimize this
@@ -79,6 +85,7 @@ export class JoinInstance {
     }
     return false;
   }
+
   // postgres unnest needs to know the names of the physical fields.
   getDialectFieldList(): DialectFieldList {
     return getDialectFieldList(this.queryStruct.structDef);

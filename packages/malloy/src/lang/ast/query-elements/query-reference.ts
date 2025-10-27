@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {ErrorFactory} from '../error-factory';
 import type {ModelEntryReference} from '../types/malloy-element';
 import {MalloyElement} from '../types/malloy-element';
@@ -42,6 +43,7 @@ export class QueryReference extends MalloyElement implements QueryElement {
   ) {
     super();
   }
+
   queryComp(isRefOk: boolean): QueryComp {
     const headEntry = this.modelEntry(this.name);
     const query = headEntry?.entry;
@@ -85,6 +87,7 @@ export class QueryReference extends MalloyElement implements QueryElement {
     );
     return oops();
   }
+
   query(): Query {
     return this.queryComp(true).query;
   }

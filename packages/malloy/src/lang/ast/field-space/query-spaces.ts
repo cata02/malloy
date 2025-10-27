@@ -168,6 +168,7 @@ export abstract class QueryOperationSpace
       for (const pathPart of wild.joinPath.list) {
         const part = pathPart.refString;
         joinPath.push(part);
+
         const ent = current.entry(part);
         if (ent) {
           if (ent instanceof StructSpaceField) {
@@ -324,6 +325,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
   ): model.FieldDef {
     let location: model.DocumentLocation | undefined = undefined;
     let name: string;
+
     if (queryFieldDef.type === 'fieldref') {
       name = queryFieldDef.path[queryFieldDef.path.length - 1];
       location = queryFieldDef.at;
@@ -461,6 +463,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
       fieldUsage = mergeFieldUsage(fieldUsage, nextFieldUsage) ?? [];
     }
     this._fieldUsage = fieldUsage;
+
     for (const drillDimension of this.drillDimensions) {
       if (!drillDimension.satisfied) {
         drillDimension.firstDrill.logError(
@@ -471,6 +474,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
         );
       }
     }
+
     this.translatedQueryFields = fields;
     return fields;
   }
@@ -504,18 +508,21 @@ export abstract class QuerySpace extends QueryOperationSpace {
       );
       return ErrorFactory.reduceSegment;
     }
+
     const segment: model.QuerySegment = {
       type: this.segmentType,
       queryFields: this.queryFieldDefs(),
       outputStruct: this.structDef(),
       isRepeated: this.isRepeated(),
     };
+
     if (refineFrom?.extendSource) {
       segment.extendSource = refineFrom.extendSource;
     }
     if (this.exprSpace.extendList.length > 0) {
       const newExtends: model.FieldDef[] = [];
       const extendedStruct = this.exprSpace.structDef();
+
       for (const extendName of this.exprSpace.extendList) {
         const extendEnt = extendedStruct.fields.find(
           f => nameFromDef(f) === extendName
@@ -544,6 +551,7 @@ export abstract class QuerySpace extends QueryOperationSpace {
 export class ReduceFieldSpace extends QuerySpace {
   readonly segmentType = 'reduce';
 }
+
 function isEmptyNest(fd: model.QueryFieldDef) {
   return (
     typeof fd !== 'string' && fd.type === 'turtle' && fd.pipeline.length === 0

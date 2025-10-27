@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {PipeSegment} from '../../../model/malloy_types';
 import {ErrorFactory} from '../error-factory';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
@@ -37,12 +38,14 @@ import {StaticSourceSpace} from '../field-space/static-space';
  */
 export class ViewRefine extends View {
   elementType = 'refine';
+
   constructor(
     readonly base: View,
     readonly refinement: View
   ) {
     super({base, refinement});
   }
+
   pipelineComp(
     fs: FieldSpace,
     parameterSpace?: ParameterSpace,
@@ -67,6 +70,7 @@ export class ViewRefine extends View {
           : ErrorFactory.structDef,
     };
   }
+
   refine(
     inputFS: SourceFieldSpace,
     pipeline: PipeSegment[],
@@ -94,6 +98,7 @@ export class ViewRefine extends View {
       isNestIn
     );
   }
+
   getImplicitName(): string | undefined {
     return this.base.getImplicitName();
   }

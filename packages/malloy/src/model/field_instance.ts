@@ -2,6 +2,7 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
+
 import type { FieldReferenceType, QueryInfo } from '../dialect';
 import type { QueryStruct } from './query_node';
 import type { Expr, OrderBy, PipeSegment, TurtleDef, UniqueKeyRequirement, } from './malloy_types';
@@ -10,6 +11,8 @@ import { AndChain, caseGroup, type GenerateState } from './utils';
 import { JoinInstance } from './join_instance';
 import { isBasicAggregate, isBasicScalar, isScalarField, QueryFieldStruct, type QueryField, } from './query_node';
 import type * as Malloy from '@malloydata/malloy-interfaces';
+
+
 type InstanceFieldUsage = {
     type: 'result';
     resultIndex: number;
@@ -19,6 +22,15 @@ type InstanceFieldUsage = {
     type: 'dependant';
 };
 export class FieldInstanceField implements FieldInstance {
+
+
+
+
+
+
+
+
+
     type: FieldInstanceType = 'field';
     additionalGroupSets: number[] = [];
     analyticalSQL: string | undefined; // the name of the field when used in a window function calculation.
@@ -93,13 +105,46 @@ export class FieldInstanceField implements FieldInstance {
         }
     }
 }
+
 type RepeatedResultType = 'nested' | 'inline_all_numbers' | 'inline';
+
 export type UngroupSet = {
     type: 'all' | 'exclude';
     fields: string[];
     groupSet: number;
 };
+
 export class FieldInstanceResult implements FieldInstance {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     type: FieldInstanceType = 'query';
     allFields = new Map<string, FieldInstance>();
     groupSet = 0;
@@ -423,14 +468,23 @@ export class FieldInstanceResult implements FieldInstance {
         }
     }
 }
+
 type FieldInstanceType = 'field' | 'query';
+
 export interface FieldInstance {
     type: FieldInstanceType;
     // groupSet: number;
     root(): FieldInstanceResultRoot;
 }
+
 /* Root Result as opposed to a turtled result */
 export class FieldInstanceResultRoot extends FieldInstanceResult {
+
+
+
+
+
+
     joins = new Map<string, JoinInstance>();
     havings = new AndChain();
     isComplexQuery = false;
@@ -520,6 +574,7 @@ export class FieldInstanceResultRoot extends FieldInstanceResult {
         }
     }
 }
+
 export function sqlFullChildReference(struct: QueryStruct, name: string, expand: {
     result: FieldInstanceResult;
     field: QueryField;

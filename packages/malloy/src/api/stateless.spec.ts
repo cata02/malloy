@@ -1856,9 +1856,11 @@ LIMIT 101
     });
   });
 });
+
 interface HasAnnotations {
   annotations?: Malloy.Annotation[] | undefined;
 }
+
 function tagFor(field: HasAnnotations | undefined) {
   return Tag.fromTagLines(
     field?.annotations
@@ -1866,6 +1868,7 @@ function tagFor(field: HasAnnotations | undefined) {
       .map(a => a.value) ?? []
   ).tag;
 }
+
 function drillExpressionFor(field: HasAnnotations | undefined) {
   const tag = tagFor(field)?.tag('drill_expression');
   if (tag === undefined) return undefined;

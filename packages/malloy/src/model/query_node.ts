@@ -2,6 +2,7 @@
  * Copyright Contributors to the Malloy project
  * SPDX-License-Identifier: MIT
  */
+
 import {v4 as uuidv4} from 'uuid';
 import type {
   FieldDef,
@@ -42,6 +43,7 @@ import type {Tag} from '@malloydata/malloy-tag';
 import type {Dialect, FieldReferenceType} from '../dialect';
 import {getDialect} from '../dialect';
 import {exprMap} from './utils';
+
 abstract class QueryNode {
   readonly referenceId: string;
   constructor(referenceId?: string) {
@@ -52,18 +54,22 @@ abstract class QueryNode {
     return undefined;
   }
 }
+
 export class QueryField extends QueryNode {
   fieldDef: FieldDef;
   parent: QueryStruct;
+
   constructor(fieldDef: FieldDef, parent: QueryStruct, referenceId?: string) {
     super(referenceId);
     this.fieldDef = fieldDef;
     this.parent = parent;
     this.fieldDef = fieldDef;
   }
+
   getIdentifier() {
     return getIdentifier(this.fieldDef);
   }
+
   getJoinableParent(): QueryStruct {
     const parent = this.parent;
     const stack =
@@ -92,12 +98,15 @@ export class QueryField extends QueryNode {
     }
     return parent;
   }
+
   isAtomic() {
     return isAtomic(this.fieldDef);
   }
+
   getFullOutputName() {
     return this.parent.getFullOutputName() + this.getIdentifier();
   }
+
   isNestedInParent(parentDef: FieldDef) {
     switch (parentDef.type) {
       case 'record':
@@ -108,37 +117,50 @@ export class QueryField extends QueryNode {
         return false;
     }
   }
+
   isArrayElement(parentDef: FieldDef) {
     return (
       parentDef.type === 'array' &&
       parentDef.elementTypeDef.type !== 'record_element'
     );
   }
+
   includeInWildcard() {
     return false;
   }
 }
+
 export abstract class QueryAtomicField<
   T extends AtomicFieldDef,
 > extends QueryField {
   fieldDef: T;
+
   constructor(fieldDef: T, parent: QueryStruct, refId?: string) {
     super(fieldDef, parent, refId);
     this.fieldDef = fieldDef; // wish I didn't have to do this
   }
+
   includeInWildcard(): boolean {
     return this.fieldDef.name !== '__distinct_key';
   }
+
   getFilterList(): FilterCondition[] {
     return [];
   }
 }
+
 export class QueryFieldBoolean extends QueryAtomicField<BooleanFieldDef> {}
+
 export class QueryFieldDate extends QueryAtomicField<DateFieldDef> {}
+
 export class QueryFieldDistinctKey extends QueryAtomicField<StringFieldDef> {}
+
 export class QueryFieldJSON extends QueryAtomicField<JSONFieldDef> {}
+
 export class QueryFieldNumber extends QueryAtomicField<NumberFieldDef> {}
+
 export class QueryFieldString extends QueryAtomicField<StringFieldDef> {}
+
 /*
  * The input to a query will always be a QueryStruct. A QueryStruct is also a namespace
  * for tracking joins, and so a QueryFieldStruct is a QueryField which has a QueryStruct.
@@ -172,22 +194,28 @@ export class QueryFieldStruct extends QueryField {
       prepareResultOptions
     );
   }
+
   /*
    * Proxy the field-like methods that QueryStruct implements, eventually
    * those probably should be in here ... I thought this would be important
    * but maybe it isn't, it doesn't fix the problem I am working on ...
    */
+
   getJoinableParent() {
     return this.queryStruct.getJoinableParent();
   }
+
   getFullOutputName() {
     return this.queryStruct.getFullOutputName();
   }
+
   includeInWildcard(): boolean {
     return this.isAtomic();
   }
 }
+
 export class QueryFieldTimestamp extends QueryAtomicField<TimestampFieldDef> {}
+
 export class QueryFieldUnsupported extends QueryAtomicField<NativeUnsupportedFieldDef> {}
 /*
  * When compound (arrays, records) types became atomic types, it became unclear
@@ -202,21 +230,25 @@ export class QueryFieldUnsupported extends QueryAtomicField<NativeUnsupportedFie
  * enough to look at all the calls is isBasicScalar.
  */
 export type QueryBasicField = QueryAtomicField<BasicAtomicDef>;
+
 // ============================================================================
 // QueryField utility functions (consolidated from is_* files)
 // ============================================================================
+
 export function isAggregateField(f: QueryField): boolean {
   if (f.isAtomic() && hasExpression(f.fieldDef)) {
     return expressionIsAggregate(f.fieldDef.expressionType);
   }
   return false;
 }
+
 export function isCalculatedField(f: QueryField): boolean {
   if (f.isAtomic() && hasExpression(f.fieldDef)) {
     return expressionIsCalculation(f.fieldDef.expressionType);
   }
   return false;
 }
+
 export function isScalarField(f: QueryField): boolean {
   if (f.isAtomic()) {
     if (hasExpression(f.fieldDef)) {
@@ -229,19 +261,24 @@ export function isScalarField(f: QueryField): boolean {
   }
   return false;
 }
+
 export function isBasicAggregate(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isAggregateField(f);
 }
+
 export function isBasicCalculation(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isCalculatedField(f);
 }
+
 export function isBasicScalar(f: QueryField): f is QueryBasicField {
   return f instanceof QueryAtomicField && isScalarField(f);
 }
+
 // Parent interface for QueryStruct
 export interface ParentQueryStruct {
   struct: QueryStruct;
 }
+
 /*
  * So that we don't have to includeQueryModel. Put properties
  * of query model which are needed in here.
@@ -249,9 +286,11 @@ export interface ParentQueryStruct {
 export interface ModelRootInterface {
   eventStream?: EventStream;
 }
+
 export interface ParentQueryModel {
   model: ModelRootInterface;
 }
+
 function identifierNormalize(s: string) {
   return s.replace(/[^a-zA-Z0-9_]/g, '_o_');
 }
@@ -332,18 +371,22 @@ export class QueryStruct {
       this.pathAliasMap = this.root().pathAliasMap;
       this.connectionName = this.root().connectionName;
     }
+
     this.dialect = getDialect(this.findFirstDialect());
     this.addFieldsFromFieldList(structDef.fields);
   }
+
   // Injeected factory to break circularity with QueryQuery
   private static turtleFieldMaker:
     | ((field: TurtleDef, parent: QueryStruct) => QueryField)
     | undefined;
+
   static registerTurtleFieldMaker(
     maker: (field: TurtleDef, parent: QueryStruct) => QueryField
   ) {
     QueryStruct.turtleFieldMaker = maker;
   }
+
   private _modelTag: Tag | undefined = undefined;
   modelCompilerFlags(): Tag {
     if (this._modelTag === undefined) {
@@ -353,6 +396,7 @@ export class QueryStruct {
     }
     return this._modelTag;
   }
+
   protected findFirstDialect(): string {
     if (isSourceDef(this.structDef)) {
       return this.structDef.dialect;
@@ -362,6 +406,7 @@ export class QueryStruct {
     }
     throw new Error('Cannot create QueryStruct from record with model parent');
   }
+
   maybeEmitParameterizedSourceUsage() {
     if (isSourceDef(this.structDef)) {
       const paramsAndArgs = {
@@ -374,6 +419,7 @@ export class QueryStruct {
       });
     }
   }
+
   private resolveParentParameterReferences(param: Parameter): Parameter {
     return {
       ...param,
@@ -412,6 +458,7 @@ export class QueryStruct {
             }),
     };
   }
+
   private _arguments: Record<string, Argument> | undefined = undefined;
   arguments(): Record<string, Argument> {
     if (this._arguments !== undefined) {
@@ -635,9 +682,11 @@ export class QueryStruct {
     (this.paramScope as any).bindings = this._arguments;
     return this._arguments;
   }
+
   private addFieldsFromFieldList(fields: FieldDef[]) {
     for (const field of fields) {
       const as = getIdentifier(field);
+
       if (field.type === 'turtle') {
         if (!QueryStruct.turtleFieldMaker) {
           throw new Error(
@@ -662,12 +711,14 @@ export class QueryStruct {
       );
     }
   }
+
   // generate unique string for the alias.
   // return a string that can be used to represent the full
   //  join path to a struct.
   getAliasIdentifier(): string {
     const path = this.getFullOutputName();
     const ret: string | undefined = this.pathAliasMap.get(path);
+
     // make a unique alias name
     if (ret === undefined) {
       const aliases = Array.from(this.pathAliasMap.values());
@@ -684,12 +735,14 @@ export class QueryStruct {
       } else {
         throw new Error('Internal Error: cannot create unique alias name');
       }
+
       // get the malloy name for this struct (will include a trailing dot)
       // return this.getFullOutputName().replace(/\.$/, "").replace(/\./g, "_o_");
     } else {
       return ret;
     }
   }
+
   getSQLIdentifier(): string {
     if (this.unnestWithNumbers() && this.parent !== undefined) {
       const x =
@@ -702,6 +755,7 @@ export class QueryStruct {
       return this.getIdentifier();
     }
   }
+
   sqlSimpleChildReference(name: string) {
     const parentRef = this.getSQLIdentifier();
     let refType: FieldReferenceType = 'table';
@@ -719,12 +773,14 @@ export class QueryStruct {
     const childType = child?.fieldDef.type || 'unknown';
     return this.dialect.sqlFieldReference(parentRef, refType, name, childType);
   }
+
   // return the name of the field in SQL
   getIdentifier(): string {
     // if it is the root table, use provided alias if we have one.
     if (isBaseTable(this.structDef)) {
       return 'base';
     }
+
     // If this is a synthetic column, return the expression rather than the name
     // because the name will not exist. Only for records because the other types
     // will have joins and thus be in the namespace. We can't compute it here
@@ -738,6 +794,7 @@ export class QueryStruct {
       }
       throw new Error('INTERNAL ERROR, record field alias not pre-computed');
     }
+
     // if this is an inline object, include the parents alias.
     if (this.structDef.type === 'record' && this.parent) {
       return this.parent.sqlSimpleChildReference(getIdentifier(this.structDef));
@@ -745,6 +802,7 @@ export class QueryStruct {
     // we are somewhere in the join tree.  Make sure the alias is unique.
     return this.getAliasIdentifier();
   }
+
   // return the name of the field in Malloy
   getFullOutputName(): string {
     if (this.parent) {
@@ -755,9 +813,11 @@ export class QueryStruct {
       return '';
     }
   }
+
   unnestWithNumbers(): boolean {
     return this.dialect.unnestWithNumbers && this.structDef.type === 'array';
   }
+
   getJoinableParent(): QueryStruct {
     // if it is inline it should always have a parent
     if (this.structDef.type === 'record') {
@@ -769,12 +829,14 @@ export class QueryStruct {
     }
     return this;
   }
+
   addFieldToNameMap(as: string, n: QueryField) {
     if (this.nameMap.has(as)) {
       throw new Error(`Redefinition of ${as}`);
     }
     this.nameMap.set(as, n);
   }
+
   /** the the primary key or throw an error. */
   getPrimaryKeyField(fieldDef: FieldDef): QueryBasicField {
     let pk;
@@ -784,6 +846,7 @@ export class QueryStruct {
       throw new Error(`Missing primary key for ${fieldDef}`);
     }
   }
+
   /**
    * called after all structure has been loaded.  Examine this structure to see
    * if if it is based on a query and if it is, add the output fields (unless
@@ -803,10 +866,12 @@ export class QueryStruct {
         this.structDef.query,
         this.prepareResultOptions
       );
+
       // should never happen.
       if (!resultStruct) {
         throw new Error("Internal Error, query didn't produce a struct");
       }
+
       const structDef = {...this.structDef};
       for (const f of resultStruct.fields) {
         const as = getIdentifier(f);
@@ -826,6 +891,7 @@ export class QueryStruct {
       }
     }
   }
+
   getModel(): ModelRootInterface {
     if (this.model) {
       return this.model;
@@ -838,9 +904,11 @@ export class QueryStruct {
       return this.parent.getModel();
     }
   }
+
   get eventStream(): EventStream | undefined {
     return this.getModel().eventStream;
   }
+
   setParent(parent: ParentQueryStruct | ParentQueryModel) {
     if ('struct' in parent) {
       this.parent = parent.struct;
@@ -897,9 +965,11 @@ export class QueryStruct {
         );
     }
   }
+
   root(): QueryStruct {
     return this.parent ? this.parent.root() : this;
   }
+
   primaryKey(): QueryBasicField | undefined {
     if (isSourceDef(this.structDef) && this.structDef.primaryKey) {
       return this.getDimensionByName([this.structDef.primaryKey]);
@@ -907,6 +977,7 @@ export class QueryStruct {
       return undefined;
     }
   }
+
   getChildByName(name: string): QueryField | undefined {
     const result = this.nameMap.get(name);
     if (result && result instanceof QueryFieldStruct) {
@@ -933,6 +1004,7 @@ export class QueryStruct {
     }
     return found;
   }
+
   // structs referenced in queries are converted to fields.
   getQueryFieldByName(name: string[]): QueryField {
     const field = this.getFieldByName(name);
@@ -941,6 +1013,7 @@ export class QueryStruct {
     }
     return field;
   }
+
   getQueryFieldReference(f: RefToField): QueryField {
     const {path, annotation, drillExpression} = f;
     const field = this.getFieldByName(path);
@@ -968,6 +1041,7 @@ export class QueryStruct {
     }
     return field;
   }
+
   getDimensionOrMeasureByName(name: string[]) {
     const field = this.getFieldByName(name);
     if (!field.isAtomic()) {
@@ -975,14 +1049,17 @@ export class QueryStruct {
     }
     return field;
   }
+
   /** returns a query object for the given name */
   getDimensionByName(name: string[]): QueryBasicField {
     const field = this.getFieldByName(name);
+
     if (isBasicScalar(field)) {
       return field;
     }
     throw new Error(`${name} is not an atomic scalar field? Inconceivable!`);
   }
+
   /** returns a query object for the given name */
   getStructByName(name: string[]): QueryStruct {
     if (name.length === 0) {
@@ -994,6 +1071,7 @@ export class QueryStruct {
     }
     throw new Error(`Error: Path to structure not found '${name.join('.')}'`);
   }
+
   getDistinctKey(): QueryBasicField {
     if (this.structDef.type !== 'record') {
       return this.getDimensionByName(['__distinct_key']);
@@ -1003,11 +1081,13 @@ export class QueryStruct {
       throw new Error('Asking a record for a primary key? Inconceivable!');
     }
   }
+
   applyStructFiltersToTurtleDef(
     turtleDef: TurtleDef | TurtleDefPlusFilters
   ): TurtleDef {
     const pipeline = [...turtleDef.pipeline];
     const annotation = turtleDef.annotation;
+
     const addedFilters = (turtleDef as TurtleDefPlusFilters).filterList || [];
     pipeline[0] = {
       ...pipeline[0],
@@ -1016,6 +1096,7 @@ export class QueryStruct {
         isSourceDef(this.structDef) ? this.structDef.filterList || [] : []
       ),
     };
+
     const flatTurtleDef: TurtleDef = {
       type: 'turtle',
       name: turtleDef.name,

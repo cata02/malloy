@@ -470,6 +470,7 @@ export class StaticSourceSpace extends StaticSpace implements SourceFieldSpace {
     return paramSpace;
   }
 }
+
 function accessAllowed(
   accessLevel: AccessModifierLabel,
   accessModifier: AccessModifierLabel
@@ -479,6 +480,7 @@ function accessAllowed(
   if (accessLevel === 'private') return true;
   return false;
 }
+
 function lessPermissiveAccessLevel(
   a: AccessModifierLabel,
   b: AccessModifierLabel

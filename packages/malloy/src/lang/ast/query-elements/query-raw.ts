@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {Query} from '../../../model/malloy_types';
 import {refIsStructDef} from '../../../model/malloy_types';
 import type {Source} from '../source-elements/source';
@@ -43,6 +44,7 @@ export class QueryRaw extends MalloyElement implements QueryElement {
   ) {
     super({source});
   }
+
   queryComp(isRefOk: boolean): QueryComp {
     const invoked = isRefOk
       ? this.source.structRef(this.parameterSpace)
@@ -61,6 +63,7 @@ export class QueryRaw extends MalloyElement implements QueryElement {
       inputStruct: structDef,
     };
   }
+
   query(): Query {
     return this.queryComp(true).query;
   }

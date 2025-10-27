@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {PipeSegment} from '../../../model/malloy_types';
 import {isRawSegment} from '../../../model/malloy_types';
 import type {QueryOperationSpace} from '../field-space/query-spaces';
@@ -40,6 +41,7 @@ export class QOpDescView extends View {
   constructor(readonly operation: QOpDesc) {
     super({operation});
   }
+
   pipelineComp(
     fs: SourceFieldSpace,
     parameterSpace?: ParameterSpace,
@@ -51,6 +53,7 @@ export class QOpDescView extends View {
       outputStruct: newOperation.outputSpace.structDef(),
     };
   }
+
   private getOp(
     inputFS: SourceFieldSpace,
     parameterSpace: ParameterSpace | undefined,
@@ -66,6 +69,7 @@ export class QOpDescView extends View {
     const {segment} = qOpDesc.getOp(inputFS, isNestIn);
     return segment;
   }
+
   refine(
     inputFS: SourceFieldSpace,
     _pipeline: PipeSegment[],
@@ -145,6 +149,7 @@ export class QOpDescView extends View {
     }
     return pipeline;
   }
+
   getImplicitName(): string | undefined {
     return undefined;
   }

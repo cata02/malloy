@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type * as model from '../../../model/malloy_types';
 import type {FieldSpace} from '../types/field-space';
 import {MalloyElement} from '../types/malloy-element';
@@ -39,16 +40,19 @@ export class ViewFieldDeclaration
   readonly isNoteableObj = true;
   extendNote = extendNoteMethod;
   note?: model.Annotation;
+
   constructor(
     readonly name: string,
     readonly view: View
   ) {
     super({view});
   }
+
   makeEntry(fs: DynamicSpace) {
     const qf = new ASTViewField(fs, this, this.name, fs.parameterSpace());
     fs.newEntry(this.name, this, qf);
   }
+
   getName(): string {
     return this.name;
   }

@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {Source} from '../source-elements/source';
 import {SourceQueryElement} from './source-query-element';
 import {QuerySource} from '../source-elements/query-source';
@@ -46,6 +47,7 @@ export class SQArrow extends SourceQueryElement {
   ) {
     super({applyTo, operation});
   }
+
   getQuery(): QueryElement | undefined {
     const lhs = this.applyTo.isSource()
       ? this.applyTo.getSource()
@@ -69,6 +71,7 @@ export class SQArrow extends SourceQueryElement {
     this.has({query: arr});
     return arr;
   }
+
   getSource(): Source | undefined {
     const query = this.getQuery();
     if (!query) {

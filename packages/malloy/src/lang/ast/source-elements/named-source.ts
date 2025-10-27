@@ -21,6 +21,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import type {
   Argument,
   Expr,
@@ -33,6 +34,7 @@ import {
   isSourceDef,
   paramHasValue,
 } from '../../../model/malloy_types';
+
 import {Source} from './source';
 import {ErrorFactory} from '../error-factory';
 import {castTo} from '../time-utils';
@@ -47,8 +49,10 @@ import {ExprIdReference} from '../expressions/expr-id-reference';
 import {ParameterSpace} from '../field-space/parameter-space';
 import type {HasParameter} from '../parameters/has-parameter';
 import {checkFilterExpression} from '../types/expression-def';
+
 export class NamedSource extends Source {
   elementType = 'namedSource';
+
   constructor(
     readonly ref: ModelEntryReference | string,
     readonly sourceArguments: Record<string, Argument> | undefined,
@@ -62,9 +66,11 @@ export class NamedSource extends Source {
       this.has({ref: ref});
     }
   }
+
   get refName(): string {
     return this.ref instanceof ModelEntryReference ? this.ref.name : this.ref;
   }
+
   structRef(parameterSpace: ParameterSpace | undefined): InvokedStructRef {
     const modelEnt = this.modelEntry(this.ref);
     // If we are not exporting the referenced structdef, don't use the reference
@@ -78,6 +84,7 @@ export class NamedSource extends Source {
       sourceArguments: this.evaluateArgumentsForRef(parameterSpace),
     };
   }
+
   refLogError<T extends MessageCode>(
     code: T,
     parameters: MessageParameterType<T>,
@@ -89,6 +96,7 @@ export class NamedSource extends Source {
       this.ref.logError(code, parameters, options);
     }
   }
+
   modelStruct(): SourceDef | undefined {
     const modelEnt = this.modelEntry(this.ref);
     const entry = modelEnt?.entry;
@@ -138,6 +146,7 @@ export class NamedSource extends Source {
       'Cannot construct a source from a never type'
     );
   }
+
   private evaluateArgumentsForRef(
     parameterSpace: ParameterSpace | undefined
   ): Record<string, Parameter> {
@@ -145,6 +154,7 @@ export class NamedSource extends Source {
     if (base === undefined) {
       return {};
     }
+
     return this.evaluateArguments(parameterSpace, base.parameters, []);
   }
   /**
@@ -374,6 +384,7 @@ export class NamedSource extends Source {
         };
       }
     }
+
     for (const paramName in parametersIn) {
       if (!(paramName in outArguments)) {
         if (!paramHasValue(parametersIn[paramName])) {
@@ -384,11 +395,14 @@ export class NamedSource extends Source {
         }
       }
     }
+
     return outArguments;
   }
+
   getSourceDef(parameterSpace: ParameterSpace | undefined): SourceDef {
     return this.withParameters(parameterSpace, []);
   }
+
   withParameters(
     parameterSpace: ParameterSpace | undefined,
     pList: HasParameter[] | undefined
@@ -400,6 +414,7 @@ export class NamedSource extends Source {
           to start the next step, because how that gets done might
           make any code I write which ignores the translation problem
           kind of meaningless.
+
 
           Maybe the output of a translation is something which describes
           all the missing data, and then there is a "link" step where you
@@ -414,11 +429,13 @@ export class NamedSource extends Source {
       notFound.dialect = notFound.dialect + err;
       return notFound;
     }
+
     const outParameters = {};
     for (const parameter of pList ?? []) {
       const compiled = parameter.parameter();
       outParameters[compiled.name] = compiled;
     }
+
     const outArguments = this.evaluateArguments(
       parameterSpace,
       base.parameters,
@@ -432,6 +449,7 @@ export class NamedSource extends Source {
         outArguments[paramName] = {...base.parameters[paramName]};
       }
     }
+
     const ret = {...base, parameters: outParameters, arguments: outArguments};
     this.document()?.rememberToAddModelAnnotations(ret);
     return ret;

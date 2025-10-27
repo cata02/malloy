@@ -4,8 +4,10 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 import {errorMessage} from './test-translator';
 import './parse-expects';
+
 /**
  * Unit tests intended to cover the custom error messages defined in
  * malloy-custom-error-messages.ts.
@@ -30,21 +32,25 @@ describe('custom error messages', () => {
         errorMessage("Expected 'is' or '(' following identifier 'x'")
       );
     });
+
     test('missing closing curly: EOF', () => {
       expect('source: x is a extend {').toLogAtLeast(
         errorMessage("Missing '}' at '<EOF>'")
       );
     });
+
     test('source: missing colon in root context', () => {
       expect('source x is a extend { }').toLogAtLeast(
         errorMessage("Expected ':' following 'source'")
       );
     });
+
     test('opening curly to EOF', () => {
       expect(`
           source: y is x extend {
         `).toLogAtLeast(errorMessage("Missing '}' at '<EOF>'"));
     });
+
     test('expression missing operand before curly', () => {
       expect(
         "source: a is presto.table('malloytest.state_facts') {}"
@@ -54,12 +60,14 @@ describe('custom error messages', () => {
         )
       );
     });
+
     test('missing opening curly after source extend keyword', () => {
       expect(`
         source: x is a extend
           primary_key: id
       `).toLogAtLeast(errorMessage("missing '{' at 'primary_key:'"));
     });
+
     test('use of the distinct keyword in a count', () => {
       expect(
         'source: x is a extend { measure: ai_count is count(distinct ai) }'
@@ -69,6 +77,7 @@ describe('custom error messages', () => {
         )
       );
     });
+
     test('mistakenly specifying a type instead of a value', () => {
       expect('source: x is a extend { dimension: s is string }').toLogAtLeast(
         errorMessage(
@@ -77,6 +86,7 @@ describe('custom error messages', () => {
       );
     });
   });
+
   describe('exploreProperties', () => {
     test('mis-spelled keyword in extends block', () => {
       expect(
@@ -95,6 +105,7 @@ describe('custom error messages', () => {
           "Unexpected 'join:'. Did you mean 'join_one:', 'join_many:' or 'join_cross:'?"
         )
       );
+
       expect(`source: x is a extend {
         primary_key: name
         join: data is y on dataId = data.id
@@ -108,10 +119,12 @@ describe('custom error messages', () => {
       expect('source: x is a extend { primaryKey: name }').toLogAtLeast(
         errorMessage("Unexpected 'primaryKey'. Did you mean 'primary_key:'?")
       );
+
       expect('source: x is a extend { primary key: name }').toLogAtLeast(
         errorMessage("Unexpected 'primary'. Did you mean 'primary_key:'?")
       );
     });
+
     test('explore statement keyword missing colon', () => {
       expect('source: x is a extend { where x > 5 }').toLogAtLeast(
         errorMessage("Expected ':' following 'where'")
@@ -123,6 +136,7 @@ describe('custom error messages', () => {
         'source: x is a extend { declare total is value.sum() }'
       ).toLogAtLeast(errorMessage("Expected ':' following 'declare'"));
     });
+
     test('incorrect opening curly after dimension', () => {
       expect(`
         source: x is a extend {
@@ -134,6 +148,7 @@ describe('custom error messages', () => {
         errorMessage("extraneous input '{' expecting {BQ_STRING, IDENTIFIER}")
       );
     });
+
     test('use of as in dimension', () => {
       expect(`source: x is a extend {
         dimension: ai as dimension_name
@@ -144,6 +159,7 @@ describe('custom error messages', () => {
       );
     });
   });
+
   describe('view', () => {
     test('view is missing name', () => {
       expect(`
@@ -154,6 +170,7 @@ describe('custom error messages', () => {
         errorMessage("'view:' must be followed by '<identifier> is {'")
       );
     });
+
     test('missing closing curly, source>view', () => {
       expect(`
         source: x is a extend {
@@ -166,6 +183,7 @@ describe('custom error messages', () => {
         }
         `).toLogAtLeast(errorMessage("Missing '}' at 'view:'"));
     });
+
     test('missing alias for aggregate inside source>view', () => {
       expect(`
       source: x is aa extend {
@@ -182,6 +200,7 @@ describe('custom error messages', () => {
         )
       );
     });
+
     test('incorrect use of undefined function in unnamed aggregate', () => {
       expect(`
         source: x is a extend {
@@ -195,29 +214,36 @@ describe('custom error messages', () => {
       );
     });
   });
+
   describe('queryStatement', () => {
     test('misspelled group_by:', () => {
       expect('source: x is a -> { groupBy: name }').toLogAtLeast(
         errorMessage("Unexpected 'groupBy'. Did you mean 'group_by:'?")
       );
+
       expect('source: x is a -> { group by: name }').toLogAtLeast(
         errorMessage("Unexpected 'group'. Did you mean 'group_by:'?")
       );
+
       expect('source: x is a -> { group by name }').toLogAtLeast(
         errorMessage("Unexpected 'group'. Did you mean 'group_by:'?")
       );
     });
+
     test('misspelled order_by:', () => {
       expect('source: x is a -> { orderBy: name }').toLogAtLeast(
         errorMessage("Unexpected 'orderBy'. Did you mean 'order_by:'?")
       );
+
       expect('source: x is a -> { order by: name }').toLogAtLeast(
         errorMessage("Unexpected 'order'. Did you mean 'order_by:'?")
       );
+
       expect('source: x is a -> { order by name }').toLogAtLeast(
         errorMessage("Unexpected 'order'. Did you mean 'order_by:'?")
       );
     });
+
     test('query statement keyword missing colon', () => {
       expect('source: x is a -> { group_by x > 5 }').toLogAtLeast(
         errorMessage("Expected ':' following 'group_by'")
@@ -238,6 +264,7 @@ describe('custom error messages', () => {
         errorMessage("Expected ':' following 'order_by'")
       );
     });
+
     test('mis-spelled keyword in query', () => {
       expect('run: a -> { groop_by: astr }').toLog(
         errorMessage(
@@ -246,6 +273,7 @@ describe('custom error messages', () => {
       );
     });
   });
+
   describe('run', () => {
     test('missing alias for aggregate entry', () => {
       expect(`
@@ -258,6 +286,7 @@ describe('custom error messages', () => {
         )
       );
     });
+
     test('run opening curly to EOF', () => {
       expect(`
           run: x -> {
@@ -274,6 +303,7 @@ describe('custom error messages', () => {
         errorMessage('Use of select is not allowed in a grouping query')
       );
     });
+
     test('group_by in selecting query', () => {
       expect(`
           run: a -> {
@@ -301,6 +331,7 @@ describe('custom error messages', () => {
         )
       );
     });
+
     test('unexpected us of "as" in select query', () => {
       expect(`
           run: a -> {

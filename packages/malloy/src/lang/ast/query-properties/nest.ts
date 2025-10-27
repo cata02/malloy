@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import * as model from '../../../model/malloy_types';
 import type {FieldSpace} from '../types/field-space';
 import {detectAndRemovePartialStages} from '../query-utils';
@@ -31,6 +32,7 @@ import {
 } from '../types/query-property-interface';
 import type {QueryBuilder} from '../types/query-builder';
 import {attachDrillPaths} from './drill';
+
 export class NestFieldDeclaration
   extends ViewFieldDeclaration
   implements QueryPropertyInterface
@@ -39,9 +41,11 @@ export class NestFieldDeclaration
   queryRefinementStage = LegalRefinementStage.Single;
   forceQueryClass = QueryClass.Grouping;
   turtleDef: model.TurtleDef | undefined = undefined;
+
   queryExecute(executeFor: QueryBuilder) {
     executeFor.resultFS.pushFields(this);
   }
+
   getFieldDef(fs: FieldSpace): model.TurtleDef {
     if (this.turtleDef) return this.turtleDef;
     if (fs.isQueryFieldSpace()) {
