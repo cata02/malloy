@@ -20,6 +20,7 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 import {
   TestTranslator,
   errorMessage,
@@ -38,6 +39,7 @@ import type {
   DocumentLocation,
   DocumentPosition,
 } from '../../model/malloy_types';
+
 describe('source locations', () => {
   test('renamed source location', () => {
     const source = markSource`source: ${'na is a'}`;
@@ -47,6 +49,7 @@ describe('source locations', () => {
       source.locations[0]
     );
   });
+
   test('refined source location', () => {
     const source = markSource`source: ${'na is a extend {}'}`;
     const m = new TestTranslator(source.code);
@@ -55,9 +58,11 @@ describe('source locations', () => {
       source.locations[0]
     );
   });
+
   // TODO make parameters have locations, and make references to them work
   // with existing jump-to-definition system
   test.todo('location of parameter');
+
   test('location of defined dimension', () => {
     const source = markSource`source: na is a extend { dimension: ${'x is 1'} }`;
     const m = new TestTranslator(source.code);
@@ -66,6 +71,7 @@ describe('source locations', () => {
     const x = getFieldDef(na, 'x');
     expect(x.location).toMatchObject(source.locations[0]);
   });
+
   test('location of defined measure', () => {
     const source = markSource`source: na is a extend { measure: ${'x is count()'} }`;
     const m = new TestTranslator(source.code);
@@ -74,6 +80,7 @@ describe('source locations', () => {
     const x = getFieldDef(na, 'x');
     expect(x.location).toMatchObject(source.locations[0]);
   });
+
   test('location of defined view', () => {
     const source = markSource`source: na is a extend { view: ${'x is { group_by: y is 1 }'} }`;
     const m = new TestTranslator(source.code);
@@ -82,6 +89,7 @@ describe('source locations', () => {
     const x = getFieldDef(na, 'x');
     expect(x.location).toMatchObject(source.locations[0]);
   });
+
   test('location of defined field inside a view', () => {
     const source = markSource`
       source: na is a extend {
@@ -89,6 +97,7 @@ describe('source locations', () => {
           group_by: ${'y is 1'}
         }
       }`;
+
     const m = new TestTranslator(source.code);
     expect(m).toTranslate();
     const na = getExplore(m.modelDef, 'na');
@@ -99,6 +108,7 @@ describe('source locations', () => {
       expect(y.location).toMatchObject(source.locations[0]);
     }
   });
+
   test('location of filtered field inside a view', () => {
     const source = markSource`
       source: na is a extend {
@@ -107,6 +117,7 @@ describe('source locations', () => {
           aggregate: ${'z is y { where: true }'}
         }
       }`;
+
     const m = new TestTranslator(source.code);
     expect(m).toTranslate();
     const na = getExplore(m.modelDef, 'na');
@@ -116,6 +127,7 @@ describe('source locations', () => {
       expect(z.location).toMatchObject(source.locations[0]);
     }
   });
+
   test('location of field inherited from table', () => {
     const source = markSource`source: na is ${"_db_.table('aTable')"}`;
     const m = new TestTranslator(source.code);
@@ -124,6 +136,7 @@ describe('source locations', () => {
     const abool = getFieldDef(na, 'abool');
     expect(abool.location).toMatchObject(source.locations[0]);
   });
+
   test('location of field inherited from sql source', () => {
     const source = markSource`
       source: na is conn.sql(${'"""SELECT 1 as one """'})
@@ -142,6 +155,7 @@ describe('source locations', () => {
       expect(one.location).isLocationIn(source.locations[0], source.code);
     }
   });
+
   test('location of fields inherited from a query', () => {
     const source = markSource`
       source: na is _db_.table('aTable') -> {
@@ -157,6 +171,7 @@ describe('source locations', () => {
     const y = getFieldDef(na, 'y');
     expect(y.location).toMatchObject(source.locations[1]);
   });
+
   test('location of named query', () => {
     const source = markSource`query: ${'q is a -> { select: * }'}`;
     const m = new TestTranslator(source.code);
@@ -164,6 +179,7 @@ describe('source locations', () => {
     const q = getExplore(m.modelDef, 'q');
     expect(q.location).toMatchObject(source.locations[0]);
   });
+
   test('location of field in named query', () => {
     const source = markSource`query: q is a -> { group_by: ${'b is 1'} }`;
     const m = new TestTranslator(source.code);
@@ -174,6 +190,7 @@ describe('source locations', () => {
       expect(a.location).toMatchObject(source.locations[0]);
     }
   });
+
   test('location of renamed field', () => {
     const source = markSource`
       source: na is a extend {
@@ -186,6 +203,7 @@ describe('source locations', () => {
     const bbool = getFieldDef(na, 'bbool');
     expect(bbool.location).toMatchObject(source.locations[0]);
   });
+
   test('location of join on', () => {
     const source = markSource`
       source: na is a extend {
@@ -198,6 +216,7 @@ describe('source locations', () => {
     const x = getFieldDef(na, 'x');
     expect(x.location).toMatchObject(source.locations[0]);
   });
+
   test('location of join with', () => {
     const source = markSource`
       source: na is a extend {
@@ -210,6 +229,7 @@ describe('source locations', () => {
     const x = getFieldDef(na, 'x');
     expect(x.location).toMatchObject(source.locations[0]);
   });
+
   test('location of field in join', () => {
     const source = markSource`
       source: na is a extend {
@@ -226,6 +246,7 @@ describe('source locations', () => {
     const y = getFieldDef(x, 'y');
     expect(y.location).toMatchObject(source.locations[0]);
   });
+
   test('undefined query location', () => {
     expect(model`run: ${'xyz'}`).toLog(
       errorMessage("Reference to undefined object 'xyz'")
@@ -242,17 +263,20 @@ describe('source locations', () => {
       errorMessage(/Use of select is not allowed in a grouping query/)
     );
   });
+
   test.skip('undefined field reference in top', () => {
     expect(model`run: a -> { group_by: one is 1; top: 1 by ${'xyz'} }`).toLog(
       errorMessage("'xyz' is not defined")
     );
   });
+
   test.skip('undefined field reference in order_by', () => {
     expect(model`run: a -> { group_by: one is 1; order_by: ${'xyz'} }`).toLog(
       errorMessage("'xyz' is not defined")
     );
   });
 });
+
 describe('source references', () => {
   test('reference to explore', () => {
     const source = markSource`
@@ -270,6 +294,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to query in query', () => {
     const source = markSource`
       source: t is a extend {
@@ -288,6 +313,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to query in query (version 2)', () => {
     const source = markSource`
       source: na is a extend { view: ${'x is { group_by: y is 1 }'} }
@@ -304,6 +330,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to query', () => {
     const source = model`
       query: ${'q is a -> { select: * }'}
@@ -320,6 +347,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to query in query head', () => {
     const source = markSource`
       query: ${'q is a -> { select: * }'}
@@ -336,6 +364,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to query in refined query', () => {
     const source = markSource`
       query: ${'q is a -> { select: * }'}
@@ -352,6 +381,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in expression', () => {
     const source = markSource`
       source: na is ${"_db_.table('aTable')"}
@@ -368,6 +398,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to quoted field in expression', () => {
     const source = markSource`
       source: na is a extend {
@@ -386,6 +417,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to joined field in expression', () => {
     const source = markSource`
       source: na is a extend {
@@ -405,6 +437,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to joined join in expression', () => {
     const source = markSource`
       source: na is a extend {
@@ -423,6 +456,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field not in expression (group by)', () => {
     const source = markSource`
       run: ${"_db_.table('aTable')"} -> { group_by: ${'abool'} }
@@ -438,6 +472,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field not in expression (project)', () => {
     const source = markSource`
       source: na is ${"_db_.table('aTable')"}
@@ -454,6 +489,7 @@ describe('source references', () => {
       },
     });
   });
+
   test.skip('reference to field in order by', () => {
     const source = markSource`
       run: ${"_db_.table('aTable')"} -> {
@@ -472,6 +508,7 @@ describe('source references', () => {
       },
     });
   });
+
   test.skip('reference to field in order by (output space)', () => {
     const source = markSource`
       run: a -> {
@@ -490,6 +527,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in aggregate', () => {
     const source = markSource`
       run: a extend { measure: ${'c is count()'} } -> {
@@ -508,6 +546,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in measure', () => {
     const source = markSource`
       source: e is a extend {
@@ -526,6 +565,7 @@ describe('source references', () => {
       },
     });
   });
+
   test.skip('reference to field in top', () => {
     const source = markSource`
       run: ${"_db_.table('aTable')"} -> {
@@ -544,6 +584,7 @@ describe('source references', () => {
       },
     });
   });
+
   test.skip('reference to field in top (output space)', () => {
     const source = markSource`
       run: a -> {
@@ -562,6 +603,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in filter', () => {
     const source = markSource`
       run: ${"_db_.table('aTable')"} -> {
@@ -580,6 +622,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in aggregate source', () => {
     const source = markSource`
       source: na is ${"_db_.table('aTable')"}
@@ -596,9 +639,11 @@ describe('source references', () => {
       },
     });
   });
+
   function pos(location: DocumentLocation): DocumentPosition {
     return location.range.start;
   }
+
   test('reference to join in aggregate source', () => {
     const source = markSource`
       source: na is a extend {
@@ -617,6 +662,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to join in aggregate in expr', () => {
     const source = markSource`
       source: na is a extend {
@@ -635,6 +681,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to sourcein join', () => {
     const source = markSource`
       source: ${'exp1 is a'}
@@ -653,6 +700,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in aggregate (in expr)', () => {
     const source = markSource`
       source: na is ${"_db_.table('aTable')"}
@@ -669,6 +717,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in rename', () => {
     const source = markSource`
       source: na is ${"_db_.table('aTable')"} extend {
@@ -686,6 +735,7 @@ describe('source references', () => {
       },
     });
   });
+
   test('reference to field in join with', () => {
     const source = markSource`
       source: exp2 is ${"_db_.table('aTable')"} extend {
