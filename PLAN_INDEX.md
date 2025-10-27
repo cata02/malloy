@@ -4,10 +4,9 @@
 
 **📋 Full Plan**: [`PARAMETER_REFACTORING_PLAN_V5_HYBRID.md`](./PARAMETER_REFACTORING_PLAN_V5_HYBRID.md)
 **📊 Summary**: [`CURRENT_PLAN_SUMMARY.md`](./CURRENT_PLAN_SUMMARY.md)
-**🏗️ Architecture**: [`ARCHITECTURAL_CLARIFICATION.md`](./ARCHITECTURAL_CLARIFICATION.md)
-**📝 Improvements**: [`FEEDBACK_IMPROVEMENTS.md`](./FEEDBACK_IMPROVEMENTS.md)
-**📁 File Organization**: [`PLAN_FILES_ORGANIZATION.md`](./PLAN_FILES_ORGANIZATION.md)
-**Status**: ✅ Ready to execute (Cleaned & organized)
+**📚 Reference**: See "Reference Documents" section below
+
+**Status**: ✅ Ready to execute (Final, cleaned)
 **Time**: 24.5-34.5 hours
 **Target**: ~128 tests passing
 
@@ -67,9 +66,10 @@ Combines the best ideas from previous iterations:
 ### Analysis & Background
 - `PARAMETER_IMPLEMENTATION_SUMMARY.md` - What was done on working branch
 - `PARAMETER_CHANGES_DEEP_DIVE.md` - Deep analysis of changes
-- `ARCHITECTURAL_CLARIFICATION.md` - Why Model must handle late binding (NEW!)
 - `PARAMETER_FEATURES_INVENTORY.md` - Feature catalog
 - `SKIPPED_TESTS_SUMMARY.md` - Tests not passing on working branch
+
+**Note**: Architecture clarifications (why Model must handle late binding) are now integrated into the main plan (lines 85-110).
 
 ### Setup & Configuration
 - `POSTGRES_SETUP_CHANGES.md` - PostgreSQL port changes (5433)
@@ -127,7 +127,7 @@ Combines the best ideas from previous iterations:
 
 **Why Not Parent-Chain**: Lower complexity, fewer files touched, lower review burden
 **Why Model Must Resolve**: Cross-boundary references, parent inheritance, runtime precedence
-**Document**: ARCHITECTURAL_CLARIFICATION.md and V5 plan architecture section
+**Document**: V5 plan architecture section (lines 85-110)
 
 **Decision**: Write parameters to IR (SourceDef.parameters)
 **Rationale**: Clear contract between layers

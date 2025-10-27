@@ -1747,42 +1747,52 @@ Lock down exact precedence rules:
 ```typescript
 // Test 1: DuckDB (default)
 test('cross-dialect: DuckDB parameter in SQL', async () => {
-  const duckRuntime = new DuckDBTestRuntime();
+  const runtime = runtimeFor('duckdb');
   await expect(`
     ##! experimental.parameters
     source: s(p::string is 'test') is duckdb.table('t') extend {
       dimension: x is p
     }
     run: s -> { select: x }
-  `).malloyResultMatches(duckRuntime, {x: 'test'});
+  `).malloyResultMatches(runtime, {x: 'test'});
 });
 
-// Test 2: PostgreSQL parameter quoting
-test('cross-dialect: PostgreSQL parameter in SQL', async () => {
-  const pgRuntime = new PostgresTestRuntime();
+// Test 2: PostgreSQL parameter quoting (gated by environment)
+const pgEnabled = process.env.MALLOY_DATABASES?.includes('postgres');
+(pgEnabled ? test : test.skip)('cross-dialect: PostgreSQL parameter in SQL', async () => {
+  const runtime = runtimeFor('postgres');
   await expect(`
     ##! experimental.parameters
     source: s(p::string is 'test''quote') is postgres.table('t') extend {
       dimension: x is p
     }
     run: s -> { select: x }
-  `).malloyResultMatches(pgRuntime, {x: "test'quote"});
+  `).malloyResultMatches(runtime, {x: "test'quote"});
 });
 
 // Test 3: Number parameters across dialects
 test('cross-dialect: number parameter formatting', async () => {
   // Test that 11 + 1 constant folding works across dialects
-  for (const [name, runtime] of [
-    ['duckdb', duckRuntime],
-    ['postgres', pgRuntime]
-  ]) {
+  const duckRuntime = runtimeFor('duckdb');
+
+  await expect(`
+    ##! experimental.parameters
+    source: s(p::number is 11 + 1) is duckdb.table('t') extend {
+      dimension: x is p
+    }
+    run: s -> { select: x }
+  `).malloyResultMatches(duckRuntime, {x: 12});
+
+  // Also test with postgres if available
+  if (pgEnabled) {
+    const pgRuntime = runtimeFor('postgres');
     await expect(`
       ##! experimental.parameters
-      source: s(p::number is 11 + 1) is ${name}.table('t') extend {
+      source: s(p::number is 11 + 1) is postgres.table('t') extend {
         dimension: x is p
       }
       run: s -> { select: x }
-    `).malloyResultMatches(runtime, {x: 12});
+    `).malloyResultMatches(pgRuntime, {x: 12});
   }
 });
 ```
@@ -1791,7 +1801,10 @@ test('cross-dialect: number parameter formatting', async () => {
 ```bash
 # Run cross-dialect tests
 npm test -- --testNamePattern="cross-dialect"
-# Expected: 3/3 passing ✓ (or skip if dialect not available)
+# Expected:
+#   - DuckDB tests: Always run (2 tests)
+#   - PostgreSQL test: Skipped if MALLOY_DATABASES doesn't include 'postgres'
+#   - Result: 2-3 passing ✓ depending on environment
 
 # Check generated SQL for each dialect
 npm test -- --testNamePattern="cross-dialect" --verbose
