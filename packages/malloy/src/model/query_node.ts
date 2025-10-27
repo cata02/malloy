@@ -72,14 +72,6 @@ export class QueryField extends QueryNode {
 
   getJoinableParent(): QueryStruct {
     const parent = this.parent;
-    const stack =
-      new Error().stack?.split('\n').slice(1, 6).join('\n      ') || 'no stack';
-    let cur: any = parent;
-    let depth = 0;
-    while (cur && depth < 10) {
-      cur = cur.parent;
-      depth++;
-    }
     // Skip record parents
     if (parent.structDef.type === 'record') {
       return parent.getJoinableParent();
@@ -111,7 +103,6 @@ export class QueryField extends QueryNode {
     switch (parentDef.type) {
       case 'record':
       case 'array':
-        return true;
         return true;
       default:
         return false;
@@ -180,10 +171,6 @@ export class QueryFieldStruct extends QueryField {
   ) {
     super(jfd, parent, referenceId);
     this.fieldDef = jfd;
-    // DEBUG: Check if join field has arguments
-    const jfdArgs = (jfd as any).arguments;
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-    }
     // Use parent.arguments() which resolves through parent chain and includes runtime values
     // This ensures join pipelines get access to runtime parameter values from the run: statement
     const finalSourceArguments = sourceArguments ?? parent.arguments();
@@ -336,8 +323,6 @@ export class QueryStruct {
     parent: ParentQueryStruct | ParentQueryModel,
     readonly prepareResultOptions: PrepareResultOptions
   ) {
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-    }
     this.setParent(parent);
     // Initialize paramScope (separate from structural parent)
     if ('model' in parent) {
@@ -431,8 +416,6 @@ export class QueryStruct {
                 const resolved1 = (
                   this.parent ? this.parent.arguments() : this.arguments()
                 )[frag.path[0]];
-                if (process.env['MALLOY_DEBUG_ARGS']) {
-                }
                 if (!resolved1) {
                   this.eventStream?.emit('parameter-miss', {
                     scope: getIdentifier(this.structDef),
@@ -465,7 +448,6 @@ export class QueryStruct {
       return this._arguments;
     }
     this._arguments = {};
-    const scopeIdentifier = getIdentifier(this.structDef);
     if (isSourceDef(this.structDef)) {
       // Build a concrete argument map: literals stay literals; parameter-node inputs resolve via parent
       const params = this.structDef.parameters ?? {};
@@ -473,18 +455,6 @@ export class QueryStruct {
       // Changed order: declaredArgs takes precedence initially, but we'll apply sourceArguments
       // selectively later for parameters that are references
       const incoming = {...(this.sourceArguments ?? {}), ...declaredArgs};
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        try {
-          // Log raw incoming nodes to verify literal vs parameter refs
-          const rawNodes: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(incoming)) {
-            const vv: any = (v as any)?.value;
-            rawNodes[k] = vv?.node ?? (vv === null ? null : typeof vv);
-          }
-        } catch (_e) {
-          // ignore
-        }
-      }
       // Seed defaults
       for (const [name, param] of Object.entries(params)) {
         this._arguments[name] = param;
@@ -492,13 +462,9 @@ export class QueryStruct {
       // Apply overrides from declared/incoming arguments with resolution of parameter references
       const resolveFromParents = (refName: string): Argument | undefined => {
         let cur: QueryStruct | undefined = this.parent;
-        if (process.env['MALLOY_DEBUG_ARGS']) {
-        }
         while (cur) {
           const a = cur.arguments?.();
           const found = a?.[refName];
-          if (process.env['MALLOY_DEBUG_ARGS']) {
-          }
           if (found && found.value !== null && found.value !== undefined) {
             return found;
           }
@@ -506,51 +472,9 @@ export class QueryStruct {
         }
         return undefined;
       };
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        try {
-          const ak = Object.keys(incoming);
-          const av: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(incoming)) {
-            const vv: any = (v as any)?.value;
-            av[k] = vv?.node ?? (vv === null ? null : typeof vv);
-          }
-        } catch (_e) {
-          // ignore
-        }
-      }
       for (const [name, arg] of Object.entries(incoming)) {
         const v: any = (arg as any)?.value;
         if (v && v.node === 'parameter') {
-          if (process.env['MALLOY_DEBUG_ARGS']) {
-            try {
-              const refNameDbg =
-                Array.isArray(v.path) && v.path.length > 0
-                  ? v.path[0]
-                  : undefined;
-              const chain: any[] = [];
-              let cur: QueryStruct | undefined = this.parent;
-              while (cur) {
-                try {
-                  const argsDbg: Record<string, any> = cur.arguments();
-                  const foundDbg: any = argsDbg?.[refNameDbg as string];
-                  const vvDbg: any = (foundDbg as any)?.value;
-                  chain.push({
-                    scope: getIdentifier(cur.structDef),
-                    has: !!foundDbg,
-                    node: vvDbg?.node ?? (vvDbg === null ? null : typeof vvDbg),
-                  });
-                } catch (_e) {
-                  chain.push({
-                    scope: getIdentifier(cur.structDef),
-                    error: true,
-                  });
-                }
-                cur = cur.parent;
-              }
-            } catch (_e) {
-              // ignore
-            }
-          }
           const refName =
             Array.isArray(v.path) && v.path.length > 0 ? v.path[0] : undefined;
           if (!refName) {
@@ -613,24 +537,6 @@ export class QueryStruct {
           }
         }
       }
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        const valueSummary: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(this._arguments)) {
-          // best-effort summarize
-          const vv: any = (v as any)?.value;
-          valueSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
-        }
-        try {
-          const sa: any = this.sourceArguments || {};
-          const saSummary: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(sa)) {
-            const vv: any = (v as any)?.value;
-            saSummary[k] = vv?.node ?? (vv === null ? null : typeof vv);
-          }
-        } catch (_e) {
-          // ignore
-        }
-      }
     } else {
       // Non-source structs (e.g., finalize/nest_source/query_result) should inherit
       // fully-resolved arguments from their parent or use any pre-seeded arguments
@@ -663,16 +569,6 @@ export class QueryStruct {
           !isSourceDef(this.structDef) && sourceArgKeys.length === 0,
       } satisfies Record<string, unknown>;
       this.eventStream?.emit('debug-args-node', payload);
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        const detailed: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(this._arguments)) {
-          const vv: any = (v as any)?.value;
-          detailed[k] = {
-            node: vv?.node ?? (vv === null ? null : typeof vv),
-            value: vv,
-          };
-        }
-      }
     } catch (_e) {
       // debug instrumentation only
     }
@@ -918,8 +814,6 @@ export class QueryStruct {
     } else {
       this.model = this.getModel();
     }
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-    }
   }
   /** makes a new queryable field object from a fieldDef */
   makeQueryField(field: FieldDef, referenceId?: string): QueryField {
@@ -930,8 +824,6 @@ export class QueryStruct {
       case 'table':
       case 'sql_select':
       case 'composite':
-        if (process.env['MALLOY_DEBUG_ARGS']) {
-        }
         return new QueryFieldStruct(
           field,
           this.arguments(),
@@ -979,10 +871,7 @@ export class QueryStruct {
   }
 
   getChildByName(name: string): QueryField | undefined {
-    const result = this.nameMap.get(name);
-    if (result && result instanceof QueryFieldStruct) {
-    }
-    return result;
+    return this.nameMap.get(name);
   }
   /** convert a path into a field reference */
   getFieldByName(path: string[]): QueryField {

@@ -28,21 +28,6 @@ import type {
   Expression,
   TurtleDefPlusFilters,
   UniqueKeyRequirement,
-  BooleanFieldDef,
-  DateFieldDef,
-  StringFieldDef,
-  JSONFieldDef,
-  NumberFieldDef,
-  TimestampFieldDef,
-  NativeUnsupportedFieldDef,
-  JoinFieldDef,
-  PrepareResultOptions,
-  AtomicFieldDef,
-  BasicAtomicDef,
-  FilterCondition,
-  Parameter,
-  SourceDef,
-  Query,
 } from './malloy_types';
 import {
   isRawSegment,
@@ -167,15 +152,6 @@ export class QueryQuery extends QueryField {
     isJoinedSubquery: boolean,
     lookupStruct: (name: string) => QueryStruct | undefined
   ): QueryQuery {
-    const stack =
-      new Error().stack
-        ?.split('\n')
-        .slice(1, 8)
-        .map(s => s.trim())
-        .join('\n  ') || 'no stack';
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      // eslint-disable-next-line no-console
-    }
     let parent = parentStruct;
 
     let turtleWithFilters =
@@ -496,20 +472,6 @@ export class QueryQuery extends QueryField {
     if (list === undefined) {
       return resultFilters;
     }
-    if (process.env['MALLOY_DEBUG_ARGS']) {
-      try {
-        const ctx = this.parent;
-        const vals: Record<string, unknown> = {};
-        const args = ctx.arguments();
-        for (const [k, v] of Object.entries(args)) {
-          const vv: any = (v as any)?.value;
-          vals[k] = vv?.node ?? (vv === null ? null : typeof vv);
-        }
-        // eslint-disable-next-line no-console
-      } catch (_e) {
-        // ignore
-      }
-    }
     // Go through the filters and make or find dependant fields
     //  add them to the field index. Place the individual filters
     // in the correct catgory.
@@ -529,8 +491,6 @@ export class QueryQuery extends QueryField {
 
   prepare(_stageWriter: StageWriter | undefined) {
     if (!this.prepared) {
-      const stack =
-        new Error().stack?.split('\n').slice(1, 6).join('\n  ') || 'no stack';
       this.expandRecordExpressions(this.rootResult, this.parent);
       // Add the root base join to the joins map
       this.rootResult.addStructToJoin(this.parent, undefined);
@@ -552,30 +512,10 @@ export class QueryQuery extends QueryField {
   }
 
   private findJoins(resultStruct: FieldInstanceResult): void {
-    const stack =
-      new Error().stack?.split('\n').slice(1, 5).join('\n  ') || 'no stack';
-    const fieldIndex = 0;
     for (const dim of resultStruct.fields()) {
-      const fieldName = dim.f.fieldDef.name;
-      const fieldDef = dim.f.fieldDef;
       if (!(dim.f instanceof QueryFieldStruct)) {
-        // Log the field's parent chain BEFORE calling getJoinableParent
         const joinableParent = dim.f.getJoinableParent();
-        // Detailed check for self-reference
-        const isSelfReference =
-          joinableParent.structDef.name === 'sf' ||
-          joinableParent.structDef.name === this.parent.structDef.name;
-        if (isSelfReference) {
-          // Log complete parent chain
-          let cur: any = dim.f.parent;
-          let depth = 0;
-          while (cur && depth < 10) {
-            cur = cur.parent;
-            depth++;
-          }
-        }
         resultStruct.addStructToJoin(joinableParent, undefined);
-      } else {
       }
     }
     for (const s of resultStruct.structs()) {
@@ -910,12 +850,8 @@ export class QueryQuery extends QueryField {
                   cur = cur.parent;
                   depth++;
                 }
-                if (!value || value.node === 'parameter') {
-                }
               }
               effectiveArgs[argName] = {...argVal, value};
-            }
-            for (const [k, v] of Object.entries(effectiveArgs)) {
             }
             // FIX: Don't set query_source as parent to avoid self-references
             // The base table inside a query_source's pipeline should be treated as root
@@ -927,9 +863,6 @@ export class QueryQuery extends QueryField {
               qs.prepareResultOptions
             );
           } else {
-            if (process.env['MALLOY_DEBUG_ARGS']) {
-              // eslint-disable-next-line no-console
-            }
             // Prefer arguments with actual values: qs.sourceArguments (runtime values),
             // then qs.structDef.arguments, then structRef.arguments, then query.sourceArguments
             const baseArgs: Record<string, any> =
@@ -940,9 +873,6 @@ export class QueryQuery extends QueryField {
               {} ||
               {};
             const effectiveArgs: Record<string, any> = {...baseArgs};
-            if (process.env['MALLOY_DEBUG_ARGS']) {
-              // eslint-disable-next-line no-console
-            }
             // Ensure any keys missing in effectiveArgs are pulled from the join struct definition
             const structArgs: Record<string, any> = (qs.structDef as any)
               .arguments;
@@ -958,26 +888,6 @@ export class QueryQuery extends QueryField {
               const resolveFromParents = (refName: string): any | undefined => {
                 // Walk up the parent chain to find a concrete value (start at parent of the join field)
                 let cur: any = (qs as any).parent;
-                if (process.env['MALLOY_DEBUG_ARGS']) {
-                  try {
-                    const chain: any[] = [];
-                    let cur2: any = (qs as any).parent;
-                    while (cur2) {
-                      const args2: Record<string, any> = cur2.arguments();
-                      const found2 = args2?.[refName];
-                      const v2: any = (found2 as any)?.value;
-                      chain.push({
-                        scope: getIdentifier(cur2.structDef),
-                        has: !!found2,
-                        node: v2?.node ?? (v2 === null ? null : typeof v2),
-                      });
-                      cur2 = cur2.parent;
-                    }
-                    // eslint-disable-next-line no-console
-                  } catch (_e) {
-                    // ignore
-                  }
-                }
                 while (cur) {
                   try {
                     const args: Record<string, any> = cur.arguments();
@@ -1006,27 +916,16 @@ export class QueryQuery extends QueryField {
                 ) {
                   const refName = v.path[0] as string;
                   const resolvedValue = resolveFromParents(refName);
-                  if (process.env['MALLOY_DEBUG_ARGS']) {
-                    // eslint-disable-next-line no-console
-                  }
                   if (resolvedValue !== undefined) {
                     (effectiveArgs as any)[an] = {
                       ...(aval as any),
                       value: resolvedValue,
                     };
-                    if (process.env['MALLOY_DEBUG_ARGS']) {
-                      // eslint-disable-next-line no-console
-                    }
                   }
                 }
               }
-              if (process.env['MALLOY_DEBUG_ARGS']) {
-                // eslint-disable-next-line no-console
-              }
             } catch (_e) {
               // best-effort resolution; fall back to original
-            }
-            for (const [k, v] of Object.entries(effectiveArgs)) {
             }
             // FIX: Don't set query_source as parent to avoid self-references
             // The base table inside a query_source's pipeline should be treated as root
@@ -1037,10 +936,6 @@ export class QueryQuery extends QueryField {
               {model: this.parent.model},
               qs.prepareResultOptions
             );
-          }
-          // DEBUG: Check if sourceStruct has parent
-          if (process.env['MALLOY_DEBUG_ARGS']) {
-            // eslint-disable-next-line no-console
           }
           const q = QueryQuery.makeQuery(
             turtleDef,
@@ -1097,25 +992,6 @@ export class QueryQuery extends QueryField {
         throw new Error('Expected joined struct to have a parent.');
       }
       if (qsDef.onExpression) {
-        if (process.env['MALLOY_DEBUG_ARGS']) {
-          try {
-            const lhsArgs = Object.fromEntries(
-              Object.entries(qs.parent.arguments()).map(([k, v]: any) => [
-                k,
-                v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
-              ])
-            );
-            const rhsArgs = Object.fromEntries(
-              Object.entries(qs.arguments()).map(([k, v]: any) => [
-                k,
-                v?.value?.node ?? (v?.value === null ? null : typeof v?.value),
-              ])
-            );
-            // eslint-disable-next-line no-console
-          } catch (_e) {
-            // ignore
-          }
-        }
         // Create a temporary field instance to generate the SQL
         const boolField = new QueryFieldBoolean(
           {
@@ -1728,7 +1604,6 @@ export class QueryQuery extends QueryField {
             limitExpressions.push(`CASE WHEN GROUP_SET=${result.groupSet} THEN
                  ROW_NUMBER() OVER (${p} ORDER BY ${obSQL.join(
                    ','
-
                  )}) END  as __row_number__${result.groupSet}`);
             // if the group set is a leaf, we can write a simple where clause.
             const filterClause = `(GROUP_SET = ${
@@ -2257,9 +2132,6 @@ export class QueryQuery extends QueryField {
         connection: structDef.connection,
         dialect: structDef.dialect,
       };
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        // eslint-disable-next-line no-console
-      }
       const qs = new QueryStruct(
         inputStruct,
         parentArgs,
@@ -2352,9 +2224,6 @@ export class QueryQuery extends QueryField {
         const parent = this.parent.parent
           ? {struct: this.parent.parent}
           : {model: this.parent.getModel()};
-        if (process.env['MALLOY_DEBUG_ARGS']) {
-          // eslint-disable-next-line no-console
-        }
         const s = new QueryStruct(
           structDef,
           capturedArgs,
@@ -2375,9 +2244,6 @@ export class QueryQuery extends QueryField {
             );
           } catch (_e) {
             // swallow event stream failures
-          }
-          if (process.env['MALLOY_DEBUG_ARGS']) {
-            // eslint-disable-next-line no-console
           }
         } catch (_e) {
           // debug instrumentation only
@@ -2407,9 +2273,6 @@ export class QueryQuery extends QueryField {
           } catch (_e) {
             // ignore event stream issues
           }
-          if (process.env['MALLOY_DEBUG_ARGS']) {
-            // eslint-disable-next-line no-console
-          }
         } catch (_e) {
           // debug instrumentation only
         }
@@ -2425,9 +2288,6 @@ export class QueryQuery extends QueryField {
     try {
       // Expose evaluated args to the parent QueryStruct for runtime param resolution in filters
       (this.parent as any)._runtimeSourceArguments = finalArgs;
-      if (process.env['MALLOY_DEBUG_ARGS']) {
-        // eslint-disable-next-line no-console
-      }
     } catch (_e) {
       // ignore
     }
